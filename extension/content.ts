@@ -3,6 +3,7 @@ import { baseSiteKey } from "../shared/site.js";
 import { validateResult } from "../shared/validation.js";
 import { adNetworkEvidence, backgroundAdEvidence, describe, hideProvisional, replace, resolveSlotWrapper, safe, slotSelector, unhideProvisional, type Candidate } from "./dom.js";
 import { collectWithFrames } from "./frame.js";
+import { createAdCover } from "./cover.js";
 import { VerdictCache } from "./verdicts.js";
 
 declare const self: Window & { __jevInstalled?: boolean };
@@ -45,6 +46,13 @@ if (!self.__jevInstalled) {
   const verdictCache: Promise<VerdictCache> = VerdictCache.load(baseSiteKey(location.hostname));
   let verdictsInstance: VerdictCache | undefined;
   void verdictCache.then((cache) => { verdictsInstance = cache; });
+
+  void chrome.storage.local.get(["adCoverEnabled", "adCoverImage"]).then((stored) => {
+    if (stored.adCoverEnabled !== true) return;
+    createAdCover(window, {
+      getImageUrl: () => (typeof stored.adCoverImage === "string" && stored.adCoverImage ? stored.adCoverImage : undefined),
+    });
+  });
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (sender.id !== chrome.runtime.id) return false;
