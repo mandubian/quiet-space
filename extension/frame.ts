@@ -24,7 +24,7 @@ export function collectWithFrames(document: Document, options?: { incremental?: 
       if (candidates.length >= MAX_BLOCKS) { limited = true; break; }
       const block = { ...candidate.block, id: `f${frameIndex}-${candidate.block.id}` };
       if (JSON.stringify({ ...request, blocks: [...request.blocks, block] }).length > MAX_STATE_CHARS) { limited = true; break; }
-      candidates.push({ node: candidate.node, snapshot: candidate.snapshot, block });
+      candidates.push({ node: candidate.node, snapshot: candidate.snapshot, block, strong: candidate.strong });
       request.blocks.push(block);
     }
     if (candidates.length >= MAX_BLOCKS) { limited = true; break; }

@@ -9,7 +9,7 @@ import puppeteer, { type Page } from "puppeteer";
 import { TypeSafeClient, type Fetch } from "@typesafe-ai/sdk";
 import { createApp } from "../server/app.js";
 import { createClassifier } from "../server/classifier.js";
-import { collect, describe, replace } from "../extension/dom.js";
+import { collect, describe, hideProvisional, replace, unhideProvisional } from "../extension/dom.js";
 import { collectWithFrames } from "../extension/frame.js";
 import { FIXTURE, IMAGE_AD, WRAPPED_IMAGE_AD, startFixtureServer } from "./fixture.js";
 import { JSDOM } from "jsdom";
@@ -184,6 +184,29 @@ test("ad-host iframes are shortlisted by container and same-origin frame content
   frameWindow.close();
 });
 
+test("strong candidates are flagged and support provisional hiding", () => {
+  const window = new JSDOM(`<body><main><p>News</p><div id="slot" data-adunitpath="/x/SLOT"><p>publicité slot content</p></div><div id="card"><a href="https://ads.example.test/x">Sponsored card text</a></div></main></body>`).window;
+  jsdomLayout(window);
+  const { candidates } = collect(window.document);
+  const slot = candidates.find((candidate) => candidate.node.id === "slot");
+  const card = candidates.find((candidate) => candidate.node.id === "card");
+  assert.ok(slot && card);
+  assert.equal(slot.strong, true, "explicit ad slot must be flagged strong");
+  assert.equal(card.strong, false, "hint-only card must not be strong");
+  hideProvisional(card.node);
+  assert.equal(card.node.dataset.jevHidden, "true");
+  assert.equal(card.node.style.opacity, "0");
+  assert.ok(!card.node.hasAttribute("data-jev-neutral"), "hiding must not replace the node");
+  unhideProvisional(card.node);
+  assert.equal(card.node.hasAttribute("data-jev-hidden"), false);
+  assert.equal(card.node.style.opacity, "");
+  hideProvisional(slot.node);
+  const restore = replace(slot, 0.99)!;
+  assert.ok(restore);
+  restore();
+  window.close();
+});
+
 test("unlabelled frames and sensitive ad containers are not selected", () => {
   const window = new JSDOM(`<body><div><iframe title="Sports highlights"></iframe></div><form>${IMAGE_AD}</form></body>`).window;
   jsdomLayout(window);
@@ -312,13 +335,12 @@ test("auto-scan debounces mutations and reclassifies inserted ads", { timeout: 1
 
 test("end-to-end: Chromium scan replaces the sponsored card and reports latency", { timeout: 120000 }, async () => {
   let upstreamCalls = 0;
-  const { close, port } = await withServer(async () => {
+  const { close, port } = await withServer(async (url, init) => {
     upstreamCalls++;
-    return Response.json({
-      model: "jev-latest",
-      answers: { ad_0: { type: "noul", noul: 0.97 }, ad_1: { type: "noul", noul: 0.97 }, ad_2: { type: "noul", noul: 0.97 }, ad_3: { type: "noul", noul: 0.97 } },
-      usage: { input_tokens: 300, output_tokens: 30 },
-    });
+    const body = JSON.parse(String(init?.body));
+    console.log(`[classify #${upstreamCalls}] blocks: ${body.state.blocks.map((block: { id: string; text: string }) => `${block.id}:"${block.text.slice(0, 30)}"`).join(", ")}`);
+    const answers = Object.fromEntries(Object.keys(body.questions).map((id) => [id, { type: "noul", noul: 0.97 }]));
+    return Response.json({ model: "jev-latest", answers, usage: { input_tokens: 300, output_tokens: 30 } });
   });
   const fixture = startFixtureServer(FIXTURE.replace("</main>", `${IMAGE_AD}${WRAPPED_IMAGE_AD}</main>`));
   await once(fixture, "listening");
@@ -387,6 +409,25 @@ test("end-to-end: Chromium scan replaces the sponsored card and reports latency"
     assert.ok(await page.$("#promo"), "restore brings back the original node");
     assert.equal(await page.$$eval(".AmPlaceholder__skeleton", (nodes) => nodes.length), 2);
     assert.ok(await page.$(".AmPlaceholder.is-rendered iframe"));
+    await extensionPage.bringToFront();
+    await extensionPage.evaluate(() => document.getElementById("scan")!.click());
+    await extensionPage.waitForFunction(() => {
+      const node = document.getElementById("status");
+      return node?.textContent?.includes("block(s) replaced") || node?.className === "error";
+    }, { timeout: 30000, polling: 50 });
+    assert.equal(upstreamCalls, 1, "repeat scan on same page must be served from the verdict cache");
+    assert.equal(await page.$$eval("[data-jev-neutral]", (nodes) => nodes.length), 3, "cached verdicts re-replace instantly");
+    const verdictStore = await worker.evaluate(() => chrome.storage.local.get(null));
+    assert.ok(Object.keys(verdictStore).some((key) => key.startsWith("verdicts:")), "verdicts must persist across page loads");
+    await page.reload({ waitUntil: "load" });
+    await page.bringToFront();
+    await extensionPage.evaluate(() => document.getElementById("scan")!.click());
+    await extensionPage.waitForFunction(() => {
+      const node = document.getElementById("status");
+      return node?.textContent?.includes("block(s) replaced") || node?.className === "error";
+    }, { timeout: 30000, polling: 50 });
+    assert.equal(upstreamCalls, 1, "scan after reload must be served from the persisted verdict cache");
+    assert.equal(await page.$$eval("[data-jev-neutral]", (nodes) => nodes.length), 3, "persisted verdicts re-replace after reload");
   } finally {
     await browser.close();
     fixture.close();

@@ -90,12 +90,12 @@ export function safe(node: HTMLElement): boolean {
   return !inside(sensitive) && !inside(pageChrome) && !inside("[data-jev-neutral]") && !node.querySelector(sensitive) && !node.querySelector(pageChrome) && node.tagName !== "BODY" && node.tagName !== "HTML";
 }
 
-export interface Candidate { node: HTMLElement; snapshot: string; block: PageBlock }
+export interface Candidate { node: HTMLElement; snapshot: string; block: PageBlock; strong: boolean }
 
 export function collect(document: Document, options?: { incremental?: boolean; skipSignatures?: Set<string> }): { request: ScanRequest; candidates: Candidate[]; limited: boolean; diagnostics: { inspected: number; eligible: number } } {
   const request: ScanRequest = { page: { host: document.location.hostname, title: document.title.slice(0, 200) }, blocks: [] };
   const win = document.defaultView;
-  const pool: { node: HTMLElement; priority: number }[] = [];
+  const pool: { node: HTMLElement; priority: number; strong: boolean }[] = [];
   const seen = new Set<HTMLElement>();
   const incremental = options?.incremental === true;
   function consider(node: HTMLElement, explicitSlot = false) {
@@ -114,7 +114,7 @@ export function collect(document: Document, options?: { incremental?: boolean; s
     const hint = explicitSlot || networkAd || adHint.test(`${node.id} ${node.className} ${node.getAttribute("aria-label") ?? ""}`) || /^(sponsored|advertisement|promoted|publicité)\b/i.test(rawText.trim());
     if (!hint && !node.querySelector("a[href]") && !node.matches("a[href]")) return;
     if (rawText.trim().length < 8 && !hint) return;
-    pool.push({ node, priority: explicitSlot || networkAd ? 3 : hint ? 2 : node.matches("article,aside,li") ? 1 : 0 });
+    pool.push({ node, priority: explicitSlot || networkAd ? 3 : hint ? 2 : node.matches("article,aside,li") ? 1 : 0, strong: explicitSlot || networkAd });
   }
   const slots = document.querySelectorAll<HTMLElement>(slotSelector);
   for (let index = 0; index < Math.min(slots.length, 100); index++) {
@@ -159,14 +159,14 @@ export function collect(document: Document, options?: { incremental?: boolean; s
   pool.sort((a, b) => b.priority - a.priority || Number(b.node.contains(a.node)) - Number(a.node.contains(b.node)));
   const candidates: Candidate[] = [];
   let limited = visited >= 2500;
-  for (const { node } of pool) {
+  for (const { node, strong } of pool) {
     if (candidates.some((candidate) => candidate.node.contains(node) || node.contains(candidate.node))) continue;
     const { block: details, signature } = describe(node);
     if (incremental && options?.skipSignatures?.has(signature)) continue;
     if (candidates.length >= MAX_BLOCKS) { limited = true; break; }
     const block = { id: `block-${candidates.length}`, ...details };
     if (JSON.stringify({ ...request, blocks: [...request.blocks, block] }).length > MAX_STATE_CHARS) { limited = true; continue; }
-    candidates.push({ node, snapshot: signature, block });
+    candidates.push({ node, snapshot: signature, block, strong });
     request.blocks.push(block);
   }
   return { request, candidates, limited, diagnostics: { inspected: Math.min(visited, 2500), eligible: pool.length } };
@@ -174,6 +174,17 @@ export function collect(document: Document, options?: { incremental?: boolean; s
 
 export function fresh(candidate: Candidate): boolean {
   return candidate.node.isConnected && safe(candidate.node) && describe(candidate.node).signature === candidate.snapshot;
+}
+
+export function hideProvisional(node: HTMLElement): void {
+  node.dataset.jevHidden = "true";
+  node.style.setProperty("opacity", "0", "important");
+}
+
+export function unhideProvisional(node: HTMLElement): void {
+  if (node.dataset.jevHidden !== "true") return;
+  delete node.dataset.jevHidden;
+  node.style.removeProperty("opacity");
 }
 
 export function replace(candidate: Candidate, probability: number): (() => void) | undefined {
@@ -197,6 +208,7 @@ export function replace(candidate: Candidate, probability: number): (() => void)
   let restored = false;
   const restore = () => {
     if (!restored && placeholder.parentNode) placeholder.replaceWith(node);
+    unhideProvisional(node);
     restored = true;
   };
   button.addEventListener("click", restore);

@@ -1,7 +1,9 @@
-import { DEFAULT_THRESHOLD } from "../shared/protocol.js";
+import { DEFAULT_THRESHOLD, type ScanRequest } from "../shared/protocol.js";
+import { baseSiteKey } from "../shared/site.js";
 import { validateResult } from "../shared/validation.js";
+import { hideProvisional, replace, unhideProvisional, type Candidate } from "./dom.js";
 import { collectWithFrames } from "./frame.js";
-import { replace } from "./dom.js";
+import { VerdictCache } from "./verdicts.js";
 
 declare const self: Window & { __jevInstalled?: boolean };
 
@@ -39,6 +41,7 @@ if (!self.__jevInstalled) {
   let mutationPending = false;
   const restores: (() => void)[] = [];
   const belowThresholdSignatures = new Set<string>();
+  const verdictCache: Promise<VerdictCache> = VerdictCache.load(baseSiteKey(location.hostname));
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (sender.id !== chrome.runtime.id) return false;
@@ -95,8 +98,14 @@ if (!self.__jevInstalled) {
     scanning = true;
     const currentGeneration = ++generation;
     const pageUrl = location.href;
+    const provisionallyHidden: HTMLElement[] = [];
+    const labelFor = (candidate: Candidate) => {
+      const position = candidate.node.querySelector("[data-ad-position]")?.getAttribute("data-ad-position");
+      return position && /^SLOT-\d+$/.test(position) ? position : candidate.node.id || candidate.block.id;
+    };
     try {
       const started = performance.now();
+      const verdicts = await verdictCache;
       const { request, candidates, limited, diagnostics } = collectWithFrames(document, { incremental, skipSignatures: belowThresholdSignatures });
       const extractionMs = Math.round(performance.now() - started);
       if (!candidates.length) {
@@ -104,36 +113,72 @@ if (!self.__jevInstalled) {
         else scheduleAuto();
         return { replaced: 0, scanned: 0, limited, extractionMs, diagnostics, auto: autoEnabled, autoDisabledReason };
       }
-      const response = await chrome.runtime.sendMessage({ type: "jev-classify", request });
-      if (generation !== currentGeneration || location.href !== pageUrl) {
-        return { replaced: 0, scanned: 0, limited, extractionMs, cancelled: true };
-      }
-      if (response?.error) {
-        return { replaced: 0, scanned: 0, limited, extractionMs, error: String(response.error) };
-      }
-      const result = validateResult(response, request);
-      const probabilities = new Map(result.decisions.map((decision) => [decision.id, decision.probability]));
       let replaced = 0;
       const judgedBelow = new Set<string>();
-      const decisions = candidates.map((candidate) => {
-        const probability = probabilities.get(candidate.block.id)!;
-        const position = candidate.node.querySelector("[data-ad-position]")?.getAttribute("data-ad-position");
-        const label = position && /^SLOT-\d+$/.test(position) ? position : candidate.node.id || candidate.block.id;
-        const restore = probability >= threshold ? replace(candidate, probability) : undefined;
+      const decisions: Decision[] = [];
+      const unknown = candidates.filter((candidate) => {
+        const cachedProbability = verdicts.get(candidate.snapshot);
+        if (cachedProbability === undefined) return true;
+        const restore = cachedProbability >= threshold ? replace(candidate, cachedProbability) : undefined;
         if (restore) { restores.push(restore); replaced++; }
-        else if (probability < threshold) judgedBelow.add(candidate.snapshot);
-        return {
-          label,
-          probability,
-          outcome: restore ? "replaced" : probability < threshold ? "below threshold" : "changed or detached before replacement",
-        };
+        else if (cachedProbability < threshold) judgedBelow.add(candidate.snapshot);
+        decisions.push({
+          label: labelFor(candidate),
+          probability: cachedProbability,
+          outcome: restore ? "replaced (known)" : cachedProbability < threshold ? "below threshold (known)" : "changed or detached before replacement",
+        });
+        return false;
       });
+      for (const candidate of unknown) {
+        if (!candidate.strong) continue;
+        hideProvisional(candidate.node);
+        provisionallyHidden.push(candidate.node);
+      }
+      const failOpen = () => {
+        provisionallyHidden.forEach(unhideProvisional);
+        provisionallyHidden.length = 0;
+      };
+      if (unknown.length) {
+        const unknownRequest: ScanRequest = { ...request, blocks: unknown.map((candidate) => candidate.block) };
+        const response = await chrome.runtime.sendMessage({ type: "jev-classify", request: unknownRequest });
+        if (generation !== currentGeneration || location.href !== pageUrl) {
+          failOpen();
+          return { replaced, scanned: candidates.length, limited, extractionMs, cancelled: true };
+        }
+        if (response?.error) {
+          failOpen();
+          return { replaced, scanned: candidates.length, limited, extractionMs, error: String(response.error) };
+        }
+        const result = validateResult(response, unknownRequest);
+        const probabilities = new Map(result.decisions.map((decision) => [decision.id, decision.probability]));
+        for (const candidate of unknown) {
+          const probability = probabilities.get(candidate.block.id)!;
+          verdicts.set(candidate.snapshot, probability);
+          const restore = probability >= threshold ? replace(candidate, probability) : undefined;
+          if (restore) { restores.push(restore); replaced++; }
+          else {
+            unhideProvisional(candidate.node);
+            judgedBelow.add(candidate.snapshot);
+          }
+          decisions.push({
+            label: labelFor(candidate),
+            probability,
+            outcome: restore ? "replaced" : probability < threshold ? "below threshold" : "changed or detached before replacement",
+          });
+        }
+      } else {
+        failOpen();
+      }
       belowThresholdSignatures.clear();
       for (const signature of judgedBelow) belowThresholdSignatures.add(signature);
+      void verdicts.save();
       if (enableAuto) enableAutoScan(threshold);
       else scheduleAuto();
       recordSummary({ replaced, scanned: candidates.length, limited, extractionMs, diagnostics, decisions, incremental, autoEnabled, autoDisabledReason });
       return { replaced, scanned: candidates.length, limited, extractionMs, diagnostics, decisions, auto: autoEnabled, autoDisabledReason };
+    } catch (error) {
+      provisionallyHidden.forEach(unhideProvisional);
+      throw error;
     } finally {
       scanning = false;
       if (mutationPending && autoEnabled) {
