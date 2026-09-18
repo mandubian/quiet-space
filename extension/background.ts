@@ -1,4 +1,5 @@
 import { BACKEND_URL, type ScanRequest } from "../shared/protocol.js";
+import { buildJevRequestBody, mapJevResponse } from "../shared/jev.js";
 import { matchingSiteKey } from "../shared/site.js";
 import { validateRequest, validateResult } from "../shared/validation.js";
 
@@ -104,16 +105,34 @@ async function handleScan(tabId: number, threshold: number, auto: boolean, sendR
 }
 
 async function handleClassify(request: ScanRequest, sendResponse: (response: unknown) => void) {
-  const { token, backendPort } = await self.chrome.storage.local.get(["token", "backendPort"]);
-  if (typeof token !== "string" || !token) {
-    sendResponse({ error: "Set the pairing token in the extension popup" });
-    return;
-  }
-  const base = typeof backendPort === "number" && backendPort > 0 && backendPort < 65536 ? `http://127.0.0.1:${backendPort}` : BACKEND_URL;
+  const { apiKey, apiBase, token, backendPort } = await self.chrome.storage.local.get(["apiKey", "apiBase", "token", "backendPort"]);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     request = validateRequest(request);
+    if (typeof apiKey === "string" && apiKey) {
+      const base = typeof apiBase === "string" && /^https?:\/\//.test(apiBase) ? apiBase : "https://api.typesafe.ai";
+      const url = `${base}/v1/systemone`;
+      console.log(`[jev] direct TypeSafe POST ${url} (${Object.keys(buildJevRequestBody(request).questions).length} questions)`);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(buildJevRequestBody(request)),
+        signal: controller.signal,
+      });
+      const data: unknown = await response.json().catch(() => undefined);
+      if (!response.ok) {
+        sendResponse({ error: response.status === 401 ? "TypeSafe rejected the API key — check it in the popup" : `TypeSafe API error (${response.status})` });
+        return;
+      }
+      sendResponse(mapJevResponse(data, request));
+      return;
+    }
+    if (typeof token !== "string" || !token) {
+      sendResponse({ error: "Paste your TypeSafe API key in the extension popup" });
+      return;
+    }
+    const base = typeof backendPort === "number" && backendPort > 0 && backendPort < 65536 ? `http://127.0.0.1:${backendPort}` : BACKEND_URL;
     const url = `${base}/classify`;
     console.log(`[jev] classify POST ${url} (${JSON.stringify(request).length} bytes)`);
     const response = await fetch(url, {
@@ -129,7 +148,7 @@ async function handleClassify(request: ScanRequest, sendResponse: (response: unk
     }
     sendResponse(validateResult(body, request));
   } catch {
-    sendResponse({ error: "Could not reach the local Jev server. Is it running?" });
+    sendResponse({ error: "Could not reach TypeSafe. Check your connection and API key." });
   } finally {
     clearTimeout(timeout);
   }

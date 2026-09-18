@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import test from "node:test";
 import puppeteer, { type Page } from "puppeteer";
@@ -450,6 +451,68 @@ test("end-to-end: Chromium scan replaces the sponsored card and reports latency"
     assert.equal(await page.$$eval("[data-jev-neutral]", (nodes) => nodes.length), 3, "persisted verdicts re-replace after reload");
   } finally {
     await browser.close();
+    fixture.close();
+    fixture.closeAllConnections?.();
+    await close();
+  }
+});
+
+test("extension-only mode calls TypeSafe directly with the user's key", { timeout: 120000 }, async () => {
+  let typeSafeCalls = 0;
+  let authHeader = "";
+  const typeSafe = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      typeSafeCalls++;
+      authHeader = String(request.headers.authorization);
+      const payload = JSON.parse(body);
+      const answers = Object.fromEntries(Object.keys(payload.questions).map((id) => [id, { type: "noul", noul: 0.97 }]));
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ model: payload.model, answers, usage: { input_tokens: 200, output_tokens: 20 } }));
+    });
+  });
+  typeSafe.listen(0, "127.0.0.1");
+  await once(typeSafe, "listening");
+  const typeSafeUrl = `http://127.0.0.1:${(typeSafe.address() as AddressInfo).port}`;
+  const { close } = await withServer(async () => { throw new Error("local server must not be used in extension-only mode"); });
+  const fixture = startFixtureServer(FIXTURE.replace("</main>", `${IMAGE_AD}${WRAPPED_IMAGE_AD}</main>`));
+  await once(fixture, "listening");
+  const fixtureUrl = `http://127.0.0.1:${(fixture.address() as AddressInfo).port}/`;
+  const browser = await puppeteer.launch({ headless: true, args: [`--disable-extensions-except=${join(import.meta.dirname, "../dist/extension")}`, `--load-extension=${join(import.meta.dirname, "../dist/extension")}`] });
+  try {
+    const page = await browser.newPage();
+    await page.goto(fixtureUrl, { waitUntil: "load" });
+    const workerTarget = await browser.waitForTarget((target) => target.type() === "service_worker", { timeout: 15000 });
+    const worker = (await workerTarget.worker())!;
+    await worker.evaluate(({ apiKey, apiBase }) => chrome.storage.local.set({ apiKey, apiBase, threshold: 0.95 }), { apiKey: "test-user-key", apiBase: typeSafeUrl });
+    await worker.evaluate(async () => {
+      await chrome.tabs.create({ url: `chrome-extension://${chrome.runtime.id}/popup.html`, active: true });
+    });
+    const extensionTarget = (await browser.waitForTarget((target) => target.url().endsWith("popup.html"), { timeout: 10000 }))!;
+    const extensionPage = (await extensionTarget.page()) as Page;
+    await extensionPage.bringToFront();
+    await extensionPage.waitForSelector("#consent", { timeout: 10000 });
+    await extensionPage.click("#consent");
+    await page.bringToFront();
+    await extensionPage.evaluate(() => document.getElementById("scan")!.click());
+    await extensionPage.waitForFunction(() => {
+      const node = document.getElementById("status");
+      return node?.textContent?.includes("block(s) replaced") || node?.className === "error";
+    }, { timeout: 30000, polling: 50     }).catch(async (error: unknown) => {
+      const diag = await extensionPage.evaluate(() => ({ status: document.getElementById("status")?.textContent, url: location.href })).catch(() => "unreachable");
+      console.log("wait failed:", String(error).slice(0, 60), "diag:", JSON.stringify(diag));
+      throw error;
+    });
+    const statusText = await extensionPage.$eval("#status", (node) => node.textContent);
+    assert.match(statusText ?? "", /^3\/3 block/);
+    assert.equal(typeSafeCalls, 1, "exactly one direct TypeSafe call");
+    assert.equal(authHeader, "Bearer test-user-key");
+    assert.equal(await page.$$eval("[data-jev-neutral]", (nodes) => nodes.length), 3);
+  } finally {
+    await browser.close();
+    typeSafe.close();
+    typeSafe.closeAllConnections?.();
     fixture.close();
     fixture.closeAllConnections?.();
     await close();

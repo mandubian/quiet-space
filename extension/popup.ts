@@ -2,7 +2,7 @@ import { DEFAULT_THRESHOLD } from "../shared/protocol.js";
 import { baseSiteKey, matchingSiteKey } from "../shared/site.js";
 
 const status = document.getElementById("status")!;
-const token = document.getElementById("token") as HTMLInputElement;
+const apiKey = document.getElementById("apikey") as HTMLInputElement;
 const threshold = document.getElementById("threshold") as HTMLInputElement;
 const thresholdValue = document.getElementById("threshold-value")!;
 const siteAuto = document.getElementById("site-auto") as HTMLInputElement;
@@ -63,13 +63,13 @@ async function refreshRestoreState() {
   }
 }
 
-function init(stored: { token?: unknown; threshold?: unknown; autoSites?: unknown; consent?: unknown }) {
-  token.value = typeof stored.token === "string" ? stored.token : "";
+function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unknown; consent?: unknown }) {
+  apiKey.value = typeof stored.apiKey === "string" ? stored.apiKey : "";
   threshold.value = typeof stored.threshold === "number" ? String(stored.threshold) : String(DEFAULT_THRESHOLD);
   thresholdValue.textContent = threshold.value;
   (document.getElementById("consent") as HTMLInputElement).checked = stored.consent === true;
 
-  token.addEventListener("change", () => chrome.storage.local.set({ token: token.value }));
+  apiKey.addEventListener("change", () => chrome.storage.local.set({ apiKey: apiKey.value }));
   document.getElementById("consent")!.addEventListener("change", (event) => {
     chrome.storage.local.set({ consent: (event.target as HTMLInputElement).checked });
   });
@@ -172,7 +172,7 @@ async function scanTab(tabId: number, auto: boolean) {
   await refreshRestoreState();
 }
 
-chrome.storage.local.get(["token", "threshold", "autoSites", "consent"]).then(init);
+chrome.storage.local.get(["apiKey", "threshold", "autoSites", "consent"]).then(init);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "jev-scan-record") return false;

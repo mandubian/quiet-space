@@ -25,9 +25,9 @@
     <div id="status"></div>
     <details><summary>Classification details</summary><pre id="decisions" style="white-space:pre-wrap;overflow-wrap:anywhere">No scan recorded yet for this page.</pre></details>
     <label><input type="checkbox" id="consent" /> I understand and consent to scanning this page</label>
-    <label>Local pairing token<input type="password" id="token" placeholder="Paste the token from npm start" autocomplete="off" /></label>
+    <label>TypeSafe API key<input type="password" id="apikey" placeholder="Paste your key from console.typesafe.ai" autocomplete="off" /></label>
     <label>Replacement threshold: <span id="threshold-value">0.95</span><input type="range" id="threshold" min="0.7" max="0.99" step="0.01" value="0.95" /></label>
-    <p class="warn">Text ads only — images, iframes' content, and video are not covered, and nothing is blocked from loading. Uncertain blocks are left untouched. Setup: <code>TYPESAFE_API_KEY=… ALLOWED_EXTENSION_ID=… npm start</code>, paste the printed token, then load <code>dist/extension</code>.</p>
+    <p class="warn">Text ads only — images, iframes' content, and video are not covered, and nothing is blocked from loading. Uncertain blocks are left untouched. Get a free key at <code>console.typesafe.ai</code> and paste it above — everything then runs from the extension, no local server needed.</p>
     <script src="popup.js"></script>
   </body>
 </html>
