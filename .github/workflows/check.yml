@@ -1,0 +1,26 @@
+name: check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Secret scan (tracked files and full history)
+        run: |
+          pat='(AIza[0-9A-Za-z_-]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})'
+          if git grep -nIE "$pat" -- . ; then echo "::error::Potential secret in tracked files"; exit 1; fi
+          if git log -p | grep -nE "$pat"; then echo "::error::Potential secret in history"; exit 1; fi
+          if grep -rnIE "TYPESAFE_API_KEY=[\"']?[A-Za-z0-9_-]{20,}" --exclude-dir=node_modules --exclude-dir=dist . ; then echo "::error::API key value committed"; exit 1; fi
+      - run: npm ci
+      - run: npm run check
