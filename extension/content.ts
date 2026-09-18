@@ -206,6 +206,7 @@ if (!self.__jevInstalled) {
   function fastPath(added: Element[]) {
     const verdicts = verdictsInstance;
     if (!verdicts) return;
+    let hidUnknown = false;
     for (const root of added.slice(0, 10)) {
       if (!(root instanceof window.HTMLElement)) continue;
       const targets: HTMLElement[] = [];
@@ -220,6 +221,8 @@ if (!self.__jevInstalled) {
         if (probability === undefined) {
           if (!resolved.dataset.jevHidden) {
             hideProvisional(resolved);
+            provisionalSweep.push({ node: resolved, time: Date.now() });
+            hidUnknown = true;
           }
           continue;
         }
@@ -229,7 +232,28 @@ if (!self.__jevInstalled) {
         }
       }
     }
+    if (hidUnknown) {
+      if (scanning) mutationPending = true;
+      else scheduleAuto();
+    }
   }
+
+  const provisionalSweep: { node: HTMLElement; time: number }[] = [];
+  window.setInterval(() => {
+    if (!provisionalSweep.length) return;
+    const now = Date.now();
+    for (let index = provisionalSweep.length - 1; index >= 0; index--) {
+      const entry = provisionalSweep[index];
+      if (!entry.node.isConnected || !entry.node.dataset.jevHidden) {
+        provisionalSweep.splice(index, 1);
+        continue;
+      }
+      if (now - entry.time > 6000) {
+        unhideProvisional(entry.node);
+        provisionalSweep.splice(index, 1);
+      }
+    }
+  }, 2000);
 
   function scheduleAuto() {
     if (!autoEnabled || autoTimer !== undefined) return;
