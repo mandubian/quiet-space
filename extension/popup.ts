@@ -83,7 +83,7 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
     if (!tab) {
       siteAuto.disabled = true;
       (siteAuto.closest("label") as HTMLLabelElement).title = "Open an http(s) page to enable filtering";
-      status.textContent = "Open an http(s) page to use Jev Neutral";
+      status.textContent = "Open an http(s) page to use Quiet Space";
       status.className = "warn";
       return;
     }

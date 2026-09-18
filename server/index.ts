@@ -30,6 +30,6 @@ const server = createApp({ extensionId, token, classify: createClassifier(client
 server.requestTimeout = 20000;
 server.headersTimeout = 10000;
 server.listen(4317, "127.0.0.1", () => {
-  console.log("Jev Neutral listening on http://127.0.0.1:4317");
+  console.log("Quiet Space listening on http://127.0.0.1:4317");
   console.log(`Local pairing token (paste into extension): ${token}`);
 });

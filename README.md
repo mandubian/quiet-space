@@ -1,4 +1,4 @@
-# Jev Neutral
+# Quiet Space
 
 A Chrome/Chromium extension that classifies small page blocks and replaces likely advertisements with reversible neutral placeholders. This is an experimental text-based filter, not a network ad blocker.
 
