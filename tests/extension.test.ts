@@ -228,6 +228,21 @@ test("taboola background-image card: whole container is the strong candidate wit
   window.close();
 });
 
+test("page-arch background ad (Le Monde style) is a strong candidate with host evidence", () => {
+  const window = new JSDOM(`<body><div id="arch-wrapper" class="o-page__arch" style="background-color:#FFF;background-image:url(&quot;https://tpc.googlesyndication.com/simgad/2327021945075893672?&quot;);background-repeat:no-repeat;background-size:min(100vw, 1600px) auto;cursor:pointer"><style>#page-wrap {padding-top: calc(min(100vw, 1600px) * 275 / 1600);}</style><p>Welcome to the site, here is some real content.</p></div></body>`).window;
+  jsdomLayout(window);
+  window.Element.prototype.getBoundingClientRect = function () {
+    return { width: 1600, height: 275, top: 0, bottom: 275, left: 0, right: 1600, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+  };
+  const { candidates } = collect(window.document);
+  const arch = candidates.find((candidate) => candidate.node.id === "arch-wrapper");
+  assert.ok(arch, "the arch wrapper must be a candidate");
+  assert.equal(arch.strong, true);
+  assert.match(arch.block.hints, /background-host tpc\.googlesyndication\.com/);
+  assert.doesNotMatch(JSON.stringify(arch.block), /2327021945075893672/);
+  window.close();
+});
+
 test("unlabelled frames and sensitive ad containers are not selected", () => {
   const window = new JSDOM(`<body><div><iframe title="Sports highlights"></iframe></div><form>${IMAGE_AD}</form></body>`).window;
   jsdomLayout(window);
