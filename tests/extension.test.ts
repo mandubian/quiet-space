@@ -207,6 +207,26 @@ test("strong candidates are flagged and support provisional hiding", () => {
   window.close();
 });
 
+test("taboola background-image card: whole container is the strong candidate with host evidence", () => {
+  const window = new JSDOM(`<body><main><p>News</p><div class="videoCube" data-item="1"><span role="img" aria-label="Image for Taboola Advertising Unit" class="thumbBlock" style="background-image:url('https://images.taboola.com/taboola/image/fetch/h_377,w_640/https://cdn.taboola.com/libtrc/static/thumbnails/9f9af80f92d6f7bba64b43bce7fb8dcf.jpg');"><span class="thumbnail-overlay"></span></span><div class="videoCubeTitle">This one trick surprised everyone</div><a href="https://match.taboola.com/click?x=123">Sponsored</a></div></main></body>`).window;
+  jsdomLayout(window);
+  window.Element.prototype.getBoundingClientRect = function () {
+    return { width: 300, height: 220, top: 100, bottom: 320, left: 0, right: 300, x: 0, y: 100, toJSON: () => ({}) } as DOMRect;
+  };
+  const { candidates } = collect(window.document);
+  const card = candidates.find((candidate) => candidate.node.className === "videoCube");
+  assert.ok(card, "the whole taboola card must be a candidate");
+  assert.equal(card.strong, true);
+  assert.match(card.block.hints, /background-host images\.taboola\.com/);
+  assert.match(card.block.label, /Taboola Advertising/);
+  assert.ok(!candidates.some((candidate) => candidate.node.className === "thumbBlock"), "inner thumbnail must be folded into its card");
+  const restore = replace(card, 0.99)!;
+  assert.equal(window.document.querySelectorAll("[data-jev-neutral]").length, 1);
+  restore();
+  assert.ok(window.document.querySelector(".videoCube"), "card is restored after undo");
+  window.close();
+});
+
 test("unlabelled frames and sensitive ad containers are not selected", () => {
   const window = new JSDOM(`<body><div><iframe title="Sports highlights"></iframe></div><form>${IMAGE_AD}</form></body>`).window;
   jsdomLayout(window);

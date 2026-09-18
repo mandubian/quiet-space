@@ -6,7 +6,23 @@ const adHint = /(?:^|[\s_-])(ad|ads|advert|advertisement|advertising|sponsored|s
 const normalize = (text: string, length: number) => text.replace(/\s+/g, " ").trim().slice(0, length);
 const slotSelector = '[data-adunitpath],iframe[aria-label="Publicité" i],iframe[aria-label="Advertisement" i],iframe[title="Advertisement" i]';
 const wrapperSelector = '.AmPlaceholder__skeleton';
-const adNetwork = /(^|\.)(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adnxs\.com|adsrvr\.org|amazon-adsystem\.com|criteo\.com|criteo\.net|2mdn\.net|tabmo\.io)$/;
+const adNetwork = /(^|\.)(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adnxs\.com|adsrvr\.org|amazon-adsystem\.com|criteo\.com|criteo\.net|2mdn\.net|tabmo\.io|taboola\.com|outbrain\.com|teads\.tv|3lift\.com|media\.net|pubmatic\.com|rubiconproject\.com|openx\.net|smartadserver\.com|casalemedia\.com)$/;
+
+function urlHost(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    return /^https?:$/.test(url.protocol) ? url.hostname : undefined;
+  } catch { return undefined; }
+}
+
+function backgroundHosts(style: CSSStyleDeclaration): string[] {
+  const hosts: string[] = [];
+  for (const match of style.backgroundImage.matchAll(/url\(["']?([^"')]+)/g)) {
+    const host = urlHost(match[1]);
+    if (host) hosts.push(host);
+  }
+  return hosts;
+}
 
 function adNetworkEvidence(node: HTMLElement): boolean {
   const anchors = node.matches("a[href]") ? [node as HTMLAnchorElement] : [...node.querySelectorAll<HTMLAnchorElement>("a[href]")].slice(0, 2);
@@ -24,12 +40,32 @@ function adNetworkEvidence(node: HTMLElement): boolean {
   return false;
 }
 
+function backgroundAdEvidence(node: HTMLElement, style?: CSSStyleDeclaration): string | undefined {
+  const candidates: string[] = [];
+  if (style) candidates.push(style.backgroundImage);
+  candidates.push(node.style.backgroundImage);
+  for (const element of [...node.querySelectorAll<HTMLElement>('[style*="background"]')].slice(0, 2)) {
+    candidates.push(element.style.backgroundImage);
+  }
+  for (const value of candidates) {
+    for (const host of backgroundHosts({ backgroundImage: value } as CSSStyleDeclaration)) {
+      if (adNetwork.test(host)) return host;
+    }
+  }
+  return undefined;
+}
+
 function slotEvidence(node: HTMLElement) {
   const frames = [...node.querySelectorAll("iframe")].slice(0, 3);
   if (node.matches("iframe")) frames.unshift(node as HTMLIFrameElement);
+  const labels = frames.map((frame) => normalize(`${frame.getAttribute("aria-label") ?? ""} ${frame.title}`, 100)).filter(Boolean);
+  for (const imageRole of [...node.querySelectorAll<HTMLElement>('[role="img"][aria-label]')].slice(0, 2)) {
+    const label = normalize(imageRole.getAttribute("aria-label") ?? "", 100);
+    if (label) labels.push(label);
+  }
   return {
     frames,
-    labels: frames.map((frame) => normalize(`${frame.getAttribute("aria-label") ?? ""} ${frame.title}`, 100)).filter(Boolean),
+    labels,
     hasAdUnit: node.hasAttribute("data-adunitpath") || Boolean(node.querySelector("[data-adunitpath]")),
     hasFrame: frames.length > 0,
   };
@@ -53,23 +89,27 @@ export function describe(node: HTMLElement): { block: Omit<PageBlock, "id">; sig
   const evidence = slotEvidence(node);
   const imageHosts: string[] = [];
   for (const image of [...node.querySelectorAll<HTMLImageElement>("img[src]")].slice(0, 3)) {
-    try {
-      const url = new URL(image.src);
-      if (/^https?:$/.test(url.protocol)) imageHosts.push(url.hostname);
-    } catch { continue; }
+    const host = urlHost(image.src);
+    if (host) imageHosts.push(host);
   }
   const frameHosts: string[] = [];
   for (const frame of evidence.frames.slice(0, 3)) {
-    try {
-      const url = new URL(frame.src);
-      if (/^https?:$/.test(url.protocol)) frameHosts.push(url.hostname);
-    } catch { continue; }
+    const host = urlHost(frame.src);
+    if (host) frameHosts.push(host);
+  }
+  const bgAdHost = backgroundAdEvidence(node);
+  const bgHosts: string[] = [];
+  if (bgAdHost) bgHosts.push(bgAdHost);
+  for (const element of [...node.querySelectorAll<HTMLElement>('[style*="background"]')].slice(0, 3)) {
+    for (const host of backgroundHosts(element.style)) {
+      if (adNetwork.test(host) && !bgHosts.includes(host)) bgHosts.push(host);
+    }
   }
   const block = {
     text: normalize(node.innerText ?? node.textContent ?? "", MAX_TEXT),
     tag: node.tagName.toLowerCase(),
     label: normalize([node.getAttribute("aria-label") ?? "", ...evidence.labels].join(" "), 160),
-    hints: normalize(`${evidence.hasAdUnit ? "data-adunitpath present; " : ""}${evidence.hasFrame ? "iframe present; " : ""}${frameHosts.map((host) => `frame-host ${host};`).join(" ")}${node.id.startsWith("google_ads_iframe_") ? "advertising-frame-container" : node.id} ${node.className}`, 160),
+    hints: normalize(`${evidence.hasAdUnit ? "data-adunitpath present; " : ""}${evidence.hasFrame ? "iframe present; " : ""}${frameHosts.map((host) => `frame-host ${host};`).join(" ")}${bgHosts.map((host) => `background-host ${host};`).join(" ")}${node.id.startsWith("google_ads_iframe_") ? "advertising-frame-container" : node.id} ${node.className}`, 160),
     context: normalize(context, 200),
     linkHosts: [...new Set(hosts)].slice(0, 4),
     imageHosts: [...new Set(imageHosts)].slice(0, 3),
@@ -101,13 +141,18 @@ export function collect(document: Document, options?: { incremental?: boolean; s
   function consider(node: HTMLElement, explicitSlot = false) {
     if (seen.has(node)) return;
     seen.add(node);
-    if (!node.matches("aside,article,li,section,div,a,iframe") || !safe(node) || node.matches('main,[role="main"]')) return;
+    if (!node.matches("aside,article,li,section,div,a,iframe,span") || !safe(node) || node.matches('main,[role="main"]')) return;
     const rect = node.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 14) return;
-    const networkAd = adNetworkEvidence(node);
+    const style = win?.getComputedStyle(node);
+    const bgHost = backgroundAdEvidence(node, style);
+    const networkAd = adNetworkEvidence(node) || Boolean(bgHost);
+    if (networkAd && !node.matches("a,iframe")) {
+      const parent = node.parentElement;
+      if (parent && parent.childElementCount <= 6) consider(parent, true);
+    }
     if (!explicitSlot && !networkAd && (rect.height > 650 || rect.width > 2000)) return;
     if (!explicitSlot && !networkAd && (rect.bottom < -300 || rect.top > (win?.innerHeight ?? 1000) + 1200)) return;
-    const style = win?.getComputedStyle(node);
     if (style?.visibility === "hidden" || style?.display === "none" || style?.opacity === "0") return;
     const rawText = node.innerText ?? node.textContent ?? "";
     if (rawText.length > MAX_TEXT || node.childElementCount > 12) return;
