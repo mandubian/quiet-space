@@ -103,6 +103,11 @@ if (!self.__jevInstalled) {
       const position = candidate.node.querySelector("[data-ad-position]")?.getAttribute("data-ad-position");
       return position && /^SLOT-\d+$/.test(position) ? position : candidate.node.id || candidate.block.id;
     };
+    if (!document.body) {
+      scanning = false;
+      if (enableAuto) enableAutoScan(threshold);
+      return { replaced: 0, scanned: 0, limited: false, extractionMs: 0, auto: autoEnabled, autoDisabledReason };
+    }
     try {
       const started = performance.now();
       const verdicts = await verdictCache;
@@ -201,7 +206,7 @@ if (!self.__jevInstalled) {
     autoTimer = window.setTimeout(async () => {
       autoTimer = undefined;
       if (location.href !== document.location.href || !document.body) {
-        disableAuto("Page changed");
+        scheduleAuto();
         return;
       }
       if (autoCount >= AUTO_MAX_SCANS) {
@@ -222,5 +227,5 @@ if (!self.__jevInstalled) {
     if (autoTimer !== undefined) return;
     if (records.some((record) => record.addedNodes.length > 0)) scheduleAuto();
   });
-  if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 }

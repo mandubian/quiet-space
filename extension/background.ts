@@ -33,20 +33,30 @@ self.chrome.runtime.onMessage.addListener((message: unknown, sender: chrome.runt
     }
     return false;
   }
-  if (type === "jev-auto-check" && sender.tab?.id !== undefined) {
+  if (type === "jev-auto-check" && sender.tab?.id !== undefined && sender.tab.id !== undefined) {
     void autoStateForTab(sender.tab.id).then((state) => {
-      if (state.enabled) void handleScan(sender.tab!.id!, state.threshold, true, () => undefined);
+      if (state.enabled) self.__jevAuthorizedTabs?.add(sender.tab!.id!);
+      sendResponse(state);
     });
-    return false;
+    return true;
   }
   return false;
 });
 
 self.chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") void self.chrome.storage.session.remove(`scan:${tabId}`);
-  if (changeInfo.status !== "complete") return;
-  void autoScanIfEnabled(tabId);
+  if (changeInfo.status !== "loading") return;
+  void injectForAutoScan(tabId);
 });
+
+async function injectForAutoScan(tabId: number) {
+  try {
+    const state = await autoStateForTab(tabId);
+    if (!state.enabled) return;
+    (self.__jevAuthorizedTabs ??= new Set<number>()).add(tabId);
+    await self.chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"], injectImmediately: true });
+  } catch { /* navigation aborted or frame not ready */ }
+}
 
 async function autoStateForTab(tabId: number): Promise<{ enabled: boolean; threshold: number }> {
   const tab = await self.chrome.tabs.get(tabId);
@@ -62,14 +72,6 @@ async function autoStateForTab(tabId: number): Promise<{ enabled: boolean; thres
     || await self.chrome.permissions.contains({ origins: [`*://${host}/*`] })
     || await self.chrome.permissions.contains({ origins: [`*://*.${key}/*`] });
   return { enabled: granted, threshold: typeof threshold === "number" ? threshold : 0.95 };
-}
-
-async function autoScanIfEnabled(tabId: number) {
-  try {
-    const state = await autoStateForTab(tabId);
-    if (!state.enabled) return;
-    await handleScan(tabId, state.threshold, true, () => undefined);
-  } catch { /* tab gone or url unreadable */ }
 }
 
 async function handleScan(tabId: number, threshold: number, auto: boolean, sendResponse: (response: unknown) => void) {
