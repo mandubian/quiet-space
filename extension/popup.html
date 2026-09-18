@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Jev Neutral</title>
+    <style>
+      body { width: 310px; margin: 0; padding: 12px; font: 13px/1.45 system-ui; color: #22312a; }
+      label { display: block; margin-top: 10px; }
+      input[type="checkbox"], input[type="range"], input[type="password"] { accent-color: #345743; }
+      input[type="password"] { box-sizing: border-box; width: 100%; margin-top: 4px; padding: 6px; }
+      button { font: 13px system-ui; cursor: pointer; color: white; background: #345743; border: 0; border-radius: 6px; padding: 7px 10px; margin-top: 10px; }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      #restore { background: #6c7f72; }
+      #status { margin-top: 10px; min-height: 17px; }
+      .error { color: #a33d2f; }
+      .warn { color: #6c5b28; }
+      .master { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <label class="master"><input type="checkbox" id="site-auto" /> Filter this site automatically</label>
+    <p id="site-hint" style="margin: 4px 0 0; color: #52625a;">Scans every page load and new content; needs site permission. Text of pages you visit here is sent to TypeSafe.</p>
+    <button id="scan">Scan now</button>
+    <button id="restore" disabled>Restore page</button>
+    <div id="status"></div>
+    <details><summary>Classification details</summary><pre id="decisions" style="white-space:pre-wrap;overflow-wrap:anywhere">No scan recorded yet for this page.</pre></details>
+    <label><input type="checkbox" id="consent" /> I understand and consent to scanning this page</label>
+    <label>Local pairing token<input type="password" id="token" placeholder="Paste the token from npm start" autocomplete="off" /></label>
+    <label>Replacement threshold: <span id="threshold-value">0.95</span><input type="range" id="threshold" min="0.7" max="0.99" step="0.01" value="0.95" /></label>
+    <p class="warn">Text ads only — images, iframes' content, and video are not covered, and nothing is blocked from loading. Uncertain blocks are left untouched. Setup: <code>TYPESAFE_API_KEY=… ALLOWED_EXTENSION_ID=… npm start</code>, paste the printed token, then load <code>dist/extension</code>.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>
