@@ -1,7 +1,7 @@
 import { DEFAULT_THRESHOLD, type ScanRequest } from "../shared/protocol.js";
 import { baseSiteKey } from "../shared/site.js";
 import { validateResult } from "../shared/validation.js";
-import { describe, hideProvisional, replace, resolveSlotWrapper, safe, slotSelector, unhideProvisional, type Candidate } from "./dom.js";
+import { adNetworkEvidence, backgroundAdEvidence, describe, hideProvisional, replace, resolveSlotWrapper, safe, slotSelector, unhideProvisional, type Candidate } from "./dom.js";
 import { collectWithFrames } from "./frame.js";
 import { VerdictCache } from "./verdicts.js";
 
@@ -210,7 +210,7 @@ if (!self.__jevInstalled) {
     for (const root of added.slice(0, 10)) {
       if (!(root instanceof window.HTMLElement)) continue;
       const targets: HTMLElement[] = [];
-      if (root.matches(slotSelector)) targets.push(root);
+      if (root.matches(slotSelector) || backgroundAdEvidence(root) || adNetworkEvidence(root)) targets.push(root);
       for (const element of [...root.querySelectorAll<HTMLElement>(slotSelector)].slice(0, 8)) targets.push(element);
       for (const node of targets.slice(0, 8)) {
         if (!node.isConnected) continue;
@@ -276,6 +276,10 @@ if (!self.__jevInstalled) {
     if (!autoEnabled) return;
     const added: Element[] = [];
     for (const record of records) {
+      if (record.type === "attributes") {
+        if (record.target instanceof window.HTMLElement) added.push(record.target);
+        continue;
+      }
       for (const node of record.addedNodes) {
         if (node.nodeType === 1) added.push(node as Element);
       }
@@ -288,5 +292,5 @@ if (!self.__jevInstalled) {
     if (autoTimer !== undefined) return;
     if (records.some((record) => record.addedNodes.length > 0)) scheduleAuto();
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
 }

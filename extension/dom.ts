@@ -24,7 +24,7 @@ function backgroundHosts(style: CSSStyleDeclaration): string[] {
   return hosts;
 }
 
-function adNetworkEvidence(node: HTMLElement): boolean {
+export function adNetworkEvidence(node: HTMLElement): boolean {
   const anchors = node.matches("a[href]") ? [node as HTMLAnchorElement] : [...node.querySelectorAll<HTMLAnchorElement>("a[href]")].slice(0, 2);
   for (const anchor of anchors) {
     try { if (adNetwork.test(new URL(anchor.href).hostname)) return true; } catch { continue; }
@@ -40,7 +40,7 @@ function adNetworkEvidence(node: HTMLElement): boolean {
   return false;
 }
 
-function backgroundAdEvidence(node: HTMLElement, style?: CSSStyleDeclaration): string | undefined {
+export function backgroundAdEvidence(node: HTMLElement, style?: CSSStyleDeclaration): string | undefined {
   const candidates: string[] = [];
   if (style) candidates.push(style.backgroundImage);
   candidates.push(node.style.backgroundImage);
@@ -194,6 +194,10 @@ export function collect(document: Document, options?: { incremental?: boolean; s
     const holder = adFrames[index].parentElement;
     if (holder) consider(holder, true);
     consider(adFrames[index], true);
+  }
+  for (const child of [...document.documentElement.children]) {
+    if (child === document.body || child.tagName === "HEAD") continue;
+    consider(child as HTMLElement);
   }
   const walker = document.createTreeWalker(document.body, 1);
   let visited = 0;
