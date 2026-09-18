@@ -4,7 +4,7 @@ const sensitive = 'form,input,textarea,select,[contenteditable]:not([contentedit
 const pageChrome = 'nav,header,footer,[role="navigation"]';
 const adHint = /(?:^|[\s_-])(ad|ads|advert|advertisement|advertising|sponsored|sponsor|promoted)(?:$|[\s_-])/i;
 const normalize = (text: string, length: number) => text.replace(/\s+/g, " ").trim().slice(0, length);
-const slotSelector = '[data-adunitpath],iframe[aria-label="Publicité" i],iframe[aria-label="Advertisement" i],iframe[title="Advertisement" i]';
+export const slotSelector = '[data-adunitpath],iframe[aria-label="Publicité" i],iframe[aria-label="Advertisement" i],iframe[title="Advertisement" i]';
 const wrapperSelector = '.AmPlaceholder__skeleton';
 const adNetwork = /(^|\.)(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adnxs\.com|adsrvr\.org|amazon-adsystem\.com|criteo\.com|criteo\.net|2mdn\.net|tabmo\.io|taboola\.com|outbrain\.com|teads\.tv|3lift\.com|media\.net|pubmatic\.com|rubiconproject\.com|openx\.net|smartadserver\.com|casalemedia\.com)$/;
 
@@ -153,7 +153,7 @@ export function collect(document: Document, options?: { incremental?: boolean; s
     }
     if (!explicitSlot && !networkAd && (rect.height > 650 || rect.width > 2000)) return;
     if (!explicitSlot && !networkAd && (rect.bottom < -300 || rect.top > (win?.innerHeight ?? 1000) + 1200)) return;
-    if (style?.visibility === "hidden" || style?.display === "none" || style?.opacity === "0") return;
+    if (node.dataset.jevHidden !== "true" && (style?.visibility === "hidden" || style?.display === "none" || style?.opacity === "0")) return;
     const rawText = node.innerText ?? node.textContent ?? "";
     if (rawText.length > MAX_TEXT || node.childElementCount > 12) return;
     const hint = explicitSlot || networkAd || adHint.test(`${node.id} ${node.className} ${node.getAttribute("aria-label") ?? ""}`) || /^(sponsored|advertisement|promoted|publicité)\b/i.test(rawText.trim());
@@ -219,6 +219,10 @@ export function collect(document: Document, options?: { incremental?: boolean; s
 
 export function fresh(candidate: Candidate): boolean {
   return candidate.node.isConnected && safe(candidate.node) && describe(candidate.node).signature === candidate.snapshot;
+}
+
+export function resolveSlotWrapper(node: HTMLElement): HTMLElement | null {
+  return node.closest<HTMLElement>(wrapperSelector) ?? (node.tagName === "IFRAME" ? node.parentElement : node);
 }
 
 export function hideProvisional(node: HTMLElement): void {

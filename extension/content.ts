@@ -1,7 +1,7 @@
 import { DEFAULT_THRESHOLD, type ScanRequest } from "../shared/protocol.js";
 import { baseSiteKey } from "../shared/site.js";
 import { validateResult } from "../shared/validation.js";
-import { hideProvisional, replace, unhideProvisional, type Candidate } from "./dom.js";
+import { describe, hideProvisional, replace, resolveSlotWrapper, safe, slotSelector, unhideProvisional, type Candidate } from "./dom.js";
 import { collectWithFrames } from "./frame.js";
 import { VerdictCache } from "./verdicts.js";
 
@@ -42,6 +42,8 @@ if (!self.__jevInstalled) {
   const restores: (() => void)[] = [];
   const belowThresholdSignatures = new Set<string>();
   const verdictCache: Promise<VerdictCache> = VerdictCache.load(baseSiteKey(location.hostname));
+  let verdictsInstance: VerdictCache | undefined;
+  void verdictCache.then((cache) => { verdictsInstance = cache; });
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (sender.id !== chrome.runtime.id) return false;
@@ -201,6 +203,34 @@ if (!self.__jevInstalled) {
     scheduleAuto();
   }
 
+  function fastPath(added: Element[]) {
+    const verdicts = verdictsInstance;
+    if (!verdicts) return;
+    for (const root of added.slice(0, 10)) {
+      if (!(root instanceof window.HTMLElement)) continue;
+      const targets: HTMLElement[] = [];
+      if (root.matches(slotSelector)) targets.push(root);
+      for (const element of [...root.querySelectorAll<HTMLElement>(slotSelector)].slice(0, 8)) targets.push(element);
+      for (const node of targets.slice(0, 8)) {
+        if (!node.isConnected) continue;
+        const resolved = resolveSlotWrapper(node);
+        if (!resolved || !safe(resolved)) continue;
+        const { block, signature } = describe(resolved);
+        const probability = verdicts.get(signature);
+        if (probability === undefined) {
+          if (!resolved.dataset.jevHidden) {
+            hideProvisional(resolved);
+          }
+          continue;
+        }
+        if (probability >= autoThreshold) {
+          const restore = replace({ node: resolved, snapshot: signature, block: { id: `fast-${resolved.tagName}`, ...block }, strong: true }, probability);
+          if (restore) restores.push(restore);
+        }
+      }
+    }
+  }
+
   function scheduleAuto() {
     if (!autoEnabled || autoTimer !== undefined) return;
     autoTimer = window.setTimeout(async () => {
@@ -220,6 +250,13 @@ if (!self.__jevInstalled) {
 
   const observer = new MutationObserver((records) => {
     if (!autoEnabled) return;
+    const added: Element[] = [];
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node.nodeType === 1) added.push(node as Element);
+      }
+    }
+    if (added.length) fastPath(added);
     if (scanning) {
       mutationPending = true;
       return;
