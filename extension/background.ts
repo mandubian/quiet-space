@@ -182,7 +182,9 @@ async function handleClassify(request: ScanRequest, sendResponse: (response: unk
         sendResponse({ error: response.status === 401 ? "TypeSafe rejected the API key — check it in the popup" : `TypeSafe API error (${response.status})` });
         return;
       }
-      sendResponse(mapJevResponse(data, request));
+      const result = mapJevResponse(data, request);
+      console.log(`[quiet-space] verdicts (${request.mode ?? "ad"}): ${result.decisions.map((decision) => `${decision.id}=${decision.probability.toFixed(2)}`).join(", ")}`);
+      sendResponse(result);
       return;
     }
     if (typeof token !== "string" || !token) {
