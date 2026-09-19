@@ -63,7 +63,7 @@ async function refreshRestoreState() {
   }
 }
 
-function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unknown; consent?: unknown; adCoverEnabled?: unknown; adCoverImage?: unknown }) {
+function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unknown; consent?: unknown; adCoverEnabled?: unknown; adCoverImage?: unknown; adCoverAudio?: unknown }) {
   apiKey.value = typeof stored.apiKey === "string" ? stored.apiKey : "";
   threshold.value = typeof stored.threshold === "number" ? String(stored.threshold) : String(DEFAULT_THRESHOLD);
   thresholdValue.textContent = threshold.value;
@@ -71,8 +71,10 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
 
   const adCover = document.getElementById("ad-cover") as HTMLInputElement;
   const adCoverImage = document.getElementById("ad-cover-image") as HTMLInputElement;
+  const adCoverAudio = document.getElementById("ad-cover-audio") as HTMLInputElement;
   adCover.checked = stored.adCoverEnabled === true;
   adCoverImage.value = typeof stored.adCoverImage === "string" ? stored.adCoverImage : "";
+  adCoverAudio.value = typeof stored.adCoverAudio === "string" ? stored.adCoverAudio : "";
 
   adCover.addEventListener("change", async () => {
     if (adCover.checked) {
@@ -93,6 +95,7 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
     }
   });
   adCoverImage.addEventListener("change", () => chrome.storage.local.set({ adCoverImage: adCoverImage.value }));
+  adCoverAudio.addEventListener("change", () => chrome.storage.local.set({ adCoverAudio: adCoverAudio.value }));
 
   apiKey.addEventListener("change", () => chrome.storage.local.set({ apiKey: apiKey.value }));
   document.getElementById("consent")!.addEventListener("change", (event) => {
@@ -197,7 +200,7 @@ async function scanTab(tabId: number, auto: boolean) {
   await refreshRestoreState();
 }
 
-chrome.storage.local.get(["apiKey", "threshold", "autoSites", "consent", "adCoverEnabled", "adCoverImage"]).then(init);
+chrome.storage.local.get(["apiKey", "threshold", "autoSites", "consent", "adCoverEnabled", "adCoverImage", "adCoverAudio"]).then(init);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "jev-scan-record") return false;

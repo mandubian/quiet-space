@@ -47,10 +47,11 @@ if (!self.__jevInstalled) {
   let verdictsInstance: VerdictCache | undefined;
   void verdictCache.then((cache) => { verdictsInstance = cache; });
 
-  void chrome.storage.local.get(["adCoverEnabled", "adCoverImage"]).then((stored) => {
+  void chrome.storage.local.get(["adCoverEnabled", "adCoverImage", "adCoverAudio"]).then((stored) => {
     if (stored.adCoverEnabled !== true) return;
     createAdCover(window, {
       getImageUrl: () => (typeof stored.adCoverImage === "string" && stored.adCoverImage ? stored.adCoverImage : undefined),
+      getAudioUrl: () => (typeof stored.adCoverAudio === "string" && stored.adCoverAudio ? stored.adCoverAudio : undefined),
     });
   });
 

@@ -1,15 +1,21 @@
 export interface AdCoverOptions {
   pollMs?: number;
   getImageUrl?: () => string | undefined;
+  getAudioUrl?: () => string | undefined;
 }
 
 export function createAdCover(window: Window, options: AdCoverOptions = {}): () => void {
   const document = window.document;
   const pollMs = options.pollMs ?? 300;
   let overlay: HTMLElement | undefined;
+  let audio: HTMLAudioElement | undefined;
   let stopped = false;
 
   const findPlayer = (): HTMLElement | null => document.getElementById("movie_player");
+
+  const setVideosMuted = (muted: boolean) => {
+    for (const video of [...document.querySelectorAll<HTMLVideoElement>("video")]) video.muted = muted;
+  };
 
   const show = (player: HTMLElement) => {
     if (overlay) return;
@@ -31,11 +37,25 @@ export function createAdCover(window: Window, options: AdCoverOptions = {}): () 
     overlay.appendChild(label);
     player.style.position = "relative";
     player.appendChild(overlay);
+    const audioUrl = options.getAudioUrl?.();
+    if (audioUrl) {
+      if (!audio) {
+        audio = document.createElement("audio");
+        audio.loop = true;
+        overlay.appendChild(audio);
+      }
+      if (audio.getAttribute("src") !== audioUrl) audio.src = audioUrl;
+      const playback = audio.play();
+      if (playback) playback.catch(() => { /* autoplay guard: tab interaction usually satisfies it */ });
+    }
+    setVideosMuted(true);
   };
 
   const hide = () => {
     overlay?.remove();
     overlay = undefined;
+    audio?.pause();
+    setVideosMuted(false);
   };
 
   const tick = () => {
@@ -56,5 +76,6 @@ export function createAdCover(window: Window, options: AdCoverOptions = {}): () 
     stopped = true;
     window.clearInterval(timer);
     hide();
+    audio = undefined;
   };
 }

@@ -43,6 +43,30 @@ test("overlay shows the configured image and survives player late arrival", asyn
   window.close();
 });
 
+test("replacement audio plays during ads with the player muted, and restores after", async () => {
+  const window = playerWindow();
+  const media = (window as unknown as { HTMLMediaElement: { prototype: Record<string, unknown> } }).HTMLMediaElement.prototype;
+  media.play = function (this: HTMLMediaElement & { _plays?: number }) { this._plays = (this._plays ?? 0) + 1; return Promise.resolve(); };
+  media.pause = function (this: HTMLMediaElement & { _pauses?: number }) { this._pauses = (this._pauses ?? 0) + 1; };
+  const stop = createAdCover(window as unknown as Window, { pollMs: 10, getAudioUrl: () => "https://audio.example.test/calm.mp3" });
+  const player = window.document.getElementById("movie_player")!;
+  const video = window.document.createElement("video");
+  player.appendChild(video);
+  player.classList.add("ad-showing");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const audio = window.document.querySelector("audio");
+  assert.ok(audio, "replacement audio element must exist during ads");
+  assert.equal(audio.getAttribute("src"), "https://audio.example.test/calm.mp3");
+  assert.equal(audio.loop, true);
+  assert.equal(video.muted, true, "ad audio must be muted");
+  player.classList.remove("ad-showing");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(video.muted, false, "player audio must be restored after the ad");
+  assert.ok((audio as HTMLAudioElement & { _pauses?: number })._pauses, "replacement audio must be paused after the ad");
+  stop();
+  window.close();
+});
+
 test("stop() removes the overlay and stops watching", async () => {
   const window = playerWindow();
   const stop = createAdCover(window as unknown as Window, { pollMs: 10 });
