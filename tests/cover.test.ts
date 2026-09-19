@@ -90,3 +90,28 @@ test("rain default is used, and setVolume controls live playback level", async (
   assert.equal(window.document.querySelector("[data-quiet-cover]"), null, "no overlay after stop");
   window.close();
 });
+
+test("player ad audio is ducked to zero during ads and restored after", async () => {
+  const window = playerWindow();
+  const calls: string[] = [];
+  const cover = createAdCover(window as unknown as Window, { pollMs: 10, defaultAudioUrl: "chrome-extension://ext/assets/rain.wav", volume: 0.6 });
+  const player = window.document.getElementById("movie_player")!;
+  (player as unknown as { setVolume: (volume: number) => void }).setVolume = (volume) => calls.push(`setVolume:${volume}`);
+  (player as unknown as { mute: () => void }).mute = () => calls.push("mute");
+  (player as unknown as { unMute: () => void }).unMute = () => calls.push("unMute");
+  const video = window.document.createElement("video");
+  player.appendChild(video);
+  video.volume = 0.8;
+  player.classList.add("ad-showing");
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.ok(calls.includes("setVolume:0"), "player API volume must be pinned to 0");
+  assert.ok(calls.includes("mute"), "player API mute must be engaged");
+  assert.equal(video.muted, true);
+  assert.equal(video.volume, 0);
+  player.classList.remove("ad-showing");
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.ok(calls.includes("unMute"), "player audio must be restored after the ad");
+  assert.equal(video.muted, false);
+  cover.stop();
+  window.close();
+});

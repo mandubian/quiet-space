@@ -22,7 +22,23 @@ export function createAdCover(window: Window, options: AdCoverOptions = {}): AdC
   const findPlayer = (): HTMLElement | null => document.getElementById("movie_player");
 
   const setVideosMuted = (muted: boolean) => {
-    for (const video of [...document.querySelectorAll<HTMLVideoElement>("video")]) video.muted = muted;
+    for (const video of [...document.querySelectorAll<HTMLVideoElement>("video")]) {
+      video.muted = muted;
+      if (muted) video.volume = 0;
+    }
+  };
+
+  const duckPlayer = (player: HTMLElement) => {
+    const api = player as unknown as { setVolume?: (volume: number) => void; mute?: () => void };
+    api.setVolume?.(0);
+    api.mute?.();
+    setVideosMuted(true);
+  };
+
+  const restorePlayer = (player: HTMLElement | null) => {
+    const api = player as unknown as { unMute?: () => void } | null;
+    api?.unMute?.();
+    setVideosMuted(false);
   };
 
   const show = (player: HTMLElement) => {
@@ -45,6 +61,7 @@ export function createAdCover(window: Window, options: AdCoverOptions = {}): AdC
     overlay.appendChild(label);
     player.style.position = "relative";
     player.appendChild(overlay);
+    duckPlayer(player);
     const audioUrl = options.getAudioUrl?.() ?? options.defaultAudioUrl;
     if (audioUrl) {
       if (!audio) {
@@ -76,8 +93,12 @@ export function createAdCover(window: Window, options: AdCoverOptions = {}): AdC
     }
     if (player.classList.contains("ad-showing")) {
       show(player);
+      duckPlayer(player);
       if (audio) audio.volume = Math.max(0, Math.min(1, volume));
-    } else hide();
+    } else {
+      hide();
+      restorePlayer(player);
+    }
   };
 
   tick();
