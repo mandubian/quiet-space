@@ -13,6 +13,8 @@ const FIXTURE = `<body>
 <p>Residents responded positively, though some raised concerns about traffic, noise during construction, and the loss of the old marketplace square.</p>
 </article>
 <div id="extra-part" class="layout-column"><p>Second part of the story continues here with substantial reporting text that the reader came for and would want to keep visible while reading.</p></div>
+<div id="taboola-widget" class="taboola-wrapper"><span role="img" aria-label="Image for Taboola Advertising Unit" class="thumbBlock" style="background-image:url('https://images.taboola.com/taboola/image/fetch/h_377,w_640/https://cdn.taboola.com/libtrc/static/thumbnails/7247ed77cc47111be9d02241346d2284.jpg');"><span class="thumbnail-overlay"></span></span><div class="thumbTitle">You will not believe what happened next</div></div>
+<div id="dtk-wrap"><div class="dtk_poster_placeholder" id="dtk_poster_placeholder_0" style="background-image: url('https://assets.digiteka.com/encoded/5338cee6a6ee0bbd74f298851f0d881eb19dbb10/image/image-001.jpg'); background-size: cover;"></div></div>
 <aside id="related" class="related-stories"><a href="/r1">Related: something else happened</a><a href="/r2">More: another story entirely</a></aside>
 <section id="comments"><p>I totally disagree with this article.</p><p>Great reporting, keep it up!</p></section>
 </body>`;
@@ -35,6 +37,8 @@ test("analysis keeps the article and flags nav, banner, related, and comments", 
   assert.ok(hiddenIds.includes("site-nav"), "nav must be deterministic noise");
   assert.ok(hiddenIds.includes("related"), "related stories must be deterministic noise");
   assert.ok(hiddenIds.includes("comments"), "comments must be deterministic noise");
+  assert.ok(hiddenIds.includes("taboola-widget"), "taboola ad widget must be ad-evidence noise");
+  assert.ok(hiddenIds.includes("dtk-wrap"), "digiteka ad poster must be ad-evidence noise");
   const ambiguousIds = ambiguous.map((node) => node.id);
   assert.ok(ambiguousIds.includes("extra-part"), "neutral container needs Jev judgment");
   window.close();

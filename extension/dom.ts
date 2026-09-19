@@ -6,7 +6,7 @@ const adHint = /(?:^|[\s_-])(ad|ads|advert|advertisement|advertising|sponsored|s
 const normalize = (text: string, length: number) => text.replace(/\s+/g, " ").trim().slice(0, length);
 export const slotSelector = '[data-adunitpath],iframe[aria-label="Publicité" i],iframe[aria-label="Advertisement" i],iframe[title="Advertisement" i]';
 const wrapperSelector = '.AmPlaceholder__skeleton';
-const adNetwork = /(^|\.)(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adnxs\.com|adsrvr\.org|amazon-adsystem\.com|criteo\.com|criteo\.net|2mdn\.net|tabmo\.io|taboola\.com|outbrain\.com|teads\.tv|3lift\.com|media\.net|pubmatic\.com|rubiconproject\.com|openx\.net|smartadserver\.com|casalemedia\.com)$/;
+const adNetwork = /(^|\.)(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adnxs\.com|adsrvr\.org|amazon-adsystem\.com|criteo\.com|criteo\.net|2mdn\.net|tabmo\.io|taboola\.com|outbrain\.com|teads\.tv|3lift\.com|media\.net|pubmatic\.com|rubiconproject\.com|openx\.net|smartadserver\.com|casalemedia\.com|digiteka\.com)$/;
 
 function urlHost(value: string): string | undefined {
   try {

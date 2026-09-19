@@ -1,5 +1,6 @@
 import { MAX_BLOCKS, MAX_STATE_CHARS, type ScanRequest, type ScanResult } from "../shared/protocol.js";
 import { validateResult } from "../shared/validation.js";
+import { adNetworkEvidence, backgroundAdEvidence } from "./dom.js";
 
 const sensitive = 'form,input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[data-private]';
 
@@ -10,6 +11,19 @@ function readingSafe(node: HTMLElement): boolean {
     current = current.parentElement;
   }
   return node.tagName !== "BODY" && node.tagName !== "HTML" && !node.querySelector(sensitive);
+}
+
+function adEvidence(node: HTMLElement): boolean {
+  if (adNetworkEvidence(node) || backgroundAdEvidence(node)) return true;
+  for (const element of [...node.querySelectorAll<HTMLElement>("img[src],iframe[src],[style*='background']")].slice(0, 8)) {
+    try {
+      const url = element.tagName === "IFRAME" || element.tagName === "IMG" ? (element as HTMLIFrameElement | HTMLImageElement).src : element.style.backgroundImage;
+      if (!url) continue;
+      const host = url.startsWith("http") ? new URL(url).hostname : (url.match(/https?:\/\/([^/"']+)/)?.[1] ?? "");
+      if (host && /(^|\.)(doubleclick\.net|googlesyndication\.com|taboola\.com|outbrain\.com|digiteka\.com|teads\.tv|adnxs\.com|media\.net|3lift\.com)$/.test(host)) return true;
+    } catch { continue; }
+  }
+  return false;
 }
 
 const noiseSelector = 'nav,header,footer,aside,[role="navigation"],[role="banner"],[role="contentinfo"],[role="complementary"],[aria-hidden="true"]';
@@ -82,6 +96,16 @@ export function analyzeReading(document: Document): ReadingAnalysis {
     if (keepRelated(node)) continue;
     if (node === document.body || node.tagName === "HTML") continue;
     if (!readingSafe(node)) continue;
+    if (adEvidence(node)) {
+      hideNow.push(node);
+      claimed.add(node);
+      for (const ancestor of ancestors(node)) {
+        if (ancestor === document.body) break;
+        claimed.add(ancestor);
+      }
+      for (const descendant of [...node.querySelectorAll<HTMLElement>("*")]) claimed.add(descendant);
+      continue;
+    }
     if (isNoiseNamed(node) || (keep === null && textLength(node) >= 80)) {
       hideNow.push(node);
       claimed.add(node);
