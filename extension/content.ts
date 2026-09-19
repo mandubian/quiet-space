@@ -62,6 +62,10 @@ if (!self.__jevInstalled) {
       respond({ auto: false });
       return false;
     }
+    if (message?.type === "jev-ping") {
+      respond({ pong: true });
+      return false;
+    }
     if (message?.type === "jev-state") {
       respond({ placeholders: document.querySelectorAll("[data-jev-neutral]").length });
       return false;

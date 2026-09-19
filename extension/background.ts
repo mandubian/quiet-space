@@ -50,8 +50,8 @@ self.chrome.runtime.onMessage.addListener((message: unknown, sender: chrome.runt
 
 self.chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") void self.chrome.storage.session.remove(`scan:${tabId}`);
-  if (changeInfo.status !== "loading") return;
-  void injectForAutoScan(tabId);
+  if (changeInfo.status === "loading") void injectForAutoScan(tabId);
+  if (changeInfo.status === "complete") void ensureInjectedForAutoScan(tabId);
 });
 
 async function injectForAutoScan(tabId: number) {
@@ -59,8 +59,36 @@ async function injectForAutoScan(tabId: number) {
     const state = await autoStateForTab(tabId);
     if (!state.enabled) return;
     (self.__jevAuthorizedTabs ??= new Set<number>()).add(tabId);
+    console.log(`[quiet-space] auto: injecting at loading for ${hostOf(await self.chrome.tabs.get(tabId))}`);
     await self.chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"], injectImmediately: true });
-  } catch { /* navigation aborted or frame not ready */ }
+  } catch (error) {
+    console.log(`[quiet-space] loading injection skipped: ${String(error).slice(0, 80)}`);
+  }
+}
+
+async function ensureInjectedForAutoScan(tabId: number) {
+  try {
+    const state = await autoStateForTab(tabId);
+    if (!state.enabled) return;
+    let alive = true;
+    try {
+      await self.chrome.tabs.sendMessage(tabId, { type: "jev-ping" });
+    } catch {
+      alive = false;
+    }
+    if (alive) return;
+    (self.__jevAuthorizedTabs ??= new Set<number>()).add(tabId);
+    await self.chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    console.log("[quiet-space] auto: late injection at complete");
+    const result = await chrome.tabs.sendMessage(tabId, { type: "jev-do-scan", threshold: state.threshold, auto: true });
+    console.log(`[quiet-space] late scan result: ${JSON.stringify(result).slice(0, 120)}`);
+  } catch (error) {
+    console.log(`[quiet-space] complete injection skipped: ${String(error).slice(0, 80)}`);
+  }
+}
+
+function hostOf(tab: chrome.tabs.Tab | undefined): string {
+  try { return new URL(tab?.url ?? "about:blank").hostname; } catch { return "?"; }
 }
 
 async function autoStateForTab(tabId: number): Promise<{ enabled: boolean; threshold: number }> {
