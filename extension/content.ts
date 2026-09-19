@@ -4,6 +4,7 @@ import { validateResult } from "../shared/validation.js";
 import { adNetworkEvidence, backgroundAdEvidence, describe, hideProvisional, replace, resolveSlotWrapper, safe, slotSelector, unhideProvisional, type Candidate } from "./dom.js";
 import { collectWithFrames } from "./frame.js";
 import { VerdictCache } from "./verdicts.js";
+import { applyQuietReading } from "./reading.js";
 
 declare const self: Window & { __jevInstalled?: boolean };
 
@@ -64,6 +65,14 @@ if (!self.__jevInstalled) {
     if (message?.type === "jev-state") {
       respond({ placeholders: document.querySelectorAll("[data-jev-neutral]").length });
       return false;
+    }
+    if (message?.type === "jev-do-reading") {
+      const threshold = Number(message.threshold);
+      applyQuietReading(document, {
+        threshold,
+        classify: async (request) => chrome.runtime.sendMessage({ type: "jev-classify", request }),
+      }).then(respond).catch(() => respond({ error: "Quiet reading failed; page unchanged." }));
+      return true;
     }
     if (message?.type !== "jev-do-scan") return false;
     const threshold = Number(message.threshold);

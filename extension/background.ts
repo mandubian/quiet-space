@@ -34,6 +34,10 @@ self.chrome.runtime.onMessage.addListener((message: unknown, sender: chrome.runt
     }
     return false;
   }
+  if (type === "jev-reading" && sender.url === chrome.runtime.getURL("popup.html")) {
+    handleReading(Number((message as { tabId?: unknown }).tabId), sendResponse);
+    return true;
+  }
   if (type === "jev-auto-check" && sender.tab?.id !== undefined && sender.tab.id !== undefined) {
     void autoStateForTab(sender.tab.id).then((state) => {
       if (state.enabled) self.__jevAuthorizedTabs?.add(sender.tab!.id!);
@@ -101,6 +105,31 @@ async function handleScan(tabId: number, threshold: number, auto: boolean, sendR
   } finally {
     if (!auto) authorized.delete(tabId);
     scanning = false;
+  }
+}
+
+async function handleReading(tabId: number, sendResponse: (response: unknown) => void) {
+  const { apiKey, token } = await self.chrome.storage.local.get(["apiKey", "token"]);
+  if (!(typeof apiKey === "string" && apiKey) && !(typeof token === "string" && token)) {
+    sendResponse({ error: "Paste your TypeSafe API key in the extension popup" });
+    return;
+  }
+  const tab = await self.chrome.tabs.get(tabId).catch(() => undefined);
+  if (!tab || !/^https?:/.test(tab.url ?? "")) {
+    sendResponse({ error: "Open an http(s) page and try again" });
+    return;
+  }
+  const authorized = (self.__jevAuthorizedTabs ??= new Set<number>());
+  authorized.add(tabId);
+  try {
+    await self.chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    const { threshold } = await self.chrome.storage.local.get("threshold");
+    const result = await chrome.tabs.sendMessage(tabId, { type: "jev-do-reading", threshold: typeof threshold === "number" ? threshold : 0.95 });
+    sendResponse(result ?? { error: "Reading script did not run" });
+  } catch (error) {
+    sendResponse({ error: error instanceof Error && error.message ? error.message : "Quiet reading failed" });
+  } finally {
+    authorized.delete(tabId);
   }
 }
 

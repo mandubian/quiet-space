@@ -19,6 +19,7 @@ export interface PageBlock {
 export interface ScanRequest {
   page: { host: string; title: string };
   blocks: PageBlock[];
+  mode?: "ad" | "reading";
 }
 
 export interface ScanResult {

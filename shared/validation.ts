@@ -26,7 +26,8 @@ export function validateRequest(value: unknown): ScanRequest {
     ids.add(block.id);
     return { id: block.id, text: block.text, tag: block.tag, label: block.label, hints: block.hints, context: block.context, linkHosts: block.linkHosts as string[], imageHosts: Array.isArray(block.imageHosts) ? block.imageHosts as string[] : [], imageAlts: block.imageAlts as string[] };
   });
-  const request = { page: { host: value.page.host, title: value.page.title }, blocks };
+  const mode: "ad" | "reading" = value.mode === "reading" ? "reading" : "ad";
+  const request = { page: { host: value.page.host, title: value.page.title }, blocks, mode };
   if (JSON.stringify(request).length > MAX_STATE_CHARS) throw new Error("Page batch is too large");
   return request;
 }

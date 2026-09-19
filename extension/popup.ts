@@ -63,6 +63,10 @@ async function refreshRestoreState() {
   }
 }
 
+function consentChecked(): boolean {
+  return (document.getElementById("consent") as HTMLInputElement).checked;
+}
+
 function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unknown; consent?: unknown }) {
   apiKey.value = typeof stored.apiKey === "string" ? stored.apiKey : "";
   threshold.value = typeof stored.threshold === "number" ? String(stored.threshold) : String(DEFAULT_THRESHOLD);
@@ -141,6 +145,35 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
         return;
       }
       await scanTab(tab.id, false);
+    })();
+  });
+
+  document.getElementById("reading")!.addEventListener("click", () => {
+    if (!consentChecked()) {
+      status.textContent = "Check the consent box first for quiet reading";
+      status.className = "error";
+      return;
+    }
+    void (async () => {
+      const tab = await activeHttpTab();
+      if (!tab) {
+        status.textContent = "Open an http(s) page and try again";
+        status.className = "error";
+        return;
+      }
+      status.textContent = "Quiet reading…";
+      decisionsPanel.textContent = "Analyzing page structure…";
+      status.className = "";
+      const result = await chrome.runtime.sendMessage({ type: "jev-reading", tabId: tab.id });
+      if (result.error) {
+        status.textContent = result.error;
+        status.className = "error";
+        return;
+      }
+      status.textContent = result.active
+        ? `Quiet reading: ${result.hidden} noise block(s) hidden — Exit via the page bar`
+        : `Quiet reading off — ${result.kept} block(s) restored`;
+      status.className = result.active ? "warn" : "";
     })();
   });
 
