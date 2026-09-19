@@ -148,6 +148,23 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
     })();
   });
 
+  async function runReading(tab: chrome.tabs.Tab & { id: number }): Promise<{ active?: boolean; hidden?: number; kept?: number; error?: string } | undefined> {
+    status.textContent = "Quiet reading…";
+    decisionsPanel.textContent = "Analyzing page structure…";
+    status.className = "";
+    const result = await chrome.runtime.sendMessage({ type: "jev-reading", tabId: tab.id });
+    if (!result || result.error) {
+      status.textContent = result?.error ?? "Quiet reading failed";
+      status.className = "error";
+      return undefined;
+    }
+    status.textContent = result.active
+      ? `Quiet reading: ${result.hidden} noise block(s) hidden — Exit via the page bar`
+      : `Quiet reading off — ${result.kept} block(s) restored`;
+    status.className = result.active ? "warn" : "";
+    return result;
+  }
+
   document.getElementById("reading")!.addEventListener("click", () => {
     if (!consentChecked()) {
       status.textContent = "Check the consent box first for quiet reading";
@@ -161,19 +178,30 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
         status.className = "error";
         return;
       }
-      status.textContent = "Quiet reading…";
-      decisionsPanel.textContent = "Analyzing page structure…";
-      status.className = "";
-      const result = await chrome.runtime.sendMessage({ type: "jev-reading", tabId: tab.id });
-      if (result.error) {
-        status.textContent = result.error;
+      await runReading(tab);
+    })();
+  });
+
+  document.getElementById("scan-read")!.addEventListener("click", () => {
+    if (!consentChecked()) {
+      status.textContent = "Check the consent box first";
+      status.className = "error";
+      return;
+    }
+    void (async () => {
+      const tab = await activeHttpTab();
+      if (!tab) {
+        status.textContent = "Open an http(s) page and try again";
         status.className = "error";
         return;
       }
-      status.textContent = result.active
-        ? `Quiet reading: ${result.hidden} noise block(s) hidden — Exit via the page bar`
-        : `Quiet reading off — ${result.kept} block(s) restored`;
-      status.className = result.active ? "warn" : "";
+      status.textContent = "Scanning ads…";
+      decisionsPanel.textContent = "Waiting for classification…";
+      const scan = await scanTab(tab.id, false);
+      if (!scan || scan.error) return;
+      const reading = await runReading(tab);
+      if (!reading || reading.error) return;
+      status.textContent = `Scan + read done — ads: ${scan.replaced}/${scan.scanned}, reading: ${reading.hidden} hidden`;
     })();
   });
 
@@ -190,7 +218,7 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
   void refreshRestoreState();
 }
 
-async function scanTab(tabId: number, auto: boolean) {
+async function scanTab(tabId: number, auto: boolean): Promise<{ replaced?: number; scanned?: number; limited?: boolean; incremental?: boolean; error?: string } | undefined> {
   status.textContent = "Scanning…";
   decisionsPanel.textContent = "Waiting for classification…";
   status.className = "";
@@ -199,10 +227,11 @@ async function scanTab(tabId: number, auto: boolean) {
     status.textContent = result.error;
     status.className = "error";
     decisionsPanel.textContent = "Scan failed — no classification results.";
-    return;
+    return undefined;
   }
   renderSummary({ ...result, incremental: result.incremental ?? false });
   await refreshRestoreState();
+  return result;
 }
 
 chrome.storage.local.get(["apiKey", "threshold", "autoSites", "consent"]).then(init);
