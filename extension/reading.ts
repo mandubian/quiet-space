@@ -93,7 +93,6 @@ export function analyzeReading(document: Document): ReadingAnalysis {
 
   const keep = dominantContainer(body);
 
-  const containers = [...body.querySelectorAll<HTMLElement>(containerSelector)].filter((node) => textLength(node) >= 250 && readingSafe(node) && !readingHidden(node));
   const keepRelated = (node: HTMLElement) => keep !== null && (keep.contains(node) || node.contains(keep));
 
   const walker = document.createTreeWalker(body, 1);
