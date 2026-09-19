@@ -15,5 +15,4 @@ const manifest = JSON.parse(await readFile("extension/manifest.json", "utf8"));
 manifest.key = JSON.parse(await readFile("extension/key.json", "utf8")).key;
 await writeFile("dist/extension/manifest.json", JSON.stringify(manifest, null, 2));
 await cp("extension/popup.html", "dist/extension/popup.html");
-await cp("extension/assets", "dist/extension/assets", { recursive: true });
 console.log("Built dist/extension");

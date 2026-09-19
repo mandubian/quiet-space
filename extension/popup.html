@@ -20,10 +20,6 @@
   <body>
     <label class="master"><input type="checkbox" id="site-auto" /> Filter this site automatically</label>
     <p id="site-hint" style="margin: 4px 0 0; color: #52625a;">Scans every page load and new content; needs site permission. Text of pages you visit here is sent to TypeSafe.</p>
-    <label><input type="checkbox" id="ad-cover" /> Cover YouTube video ads with a quiet overlay</label>
-    <label>Overlay image URL (optional)<input type="url" id="ad-cover-image" placeholder="https://… image you like" autocomplete="off" /></label>
-    <label>Replacement audio URL (optional — default is rain)<input type="url" id="ad-cover-audio" placeholder="https://… looping audio during ads" autocomplete="off" /></label>
-    <label>Overlay sound volume: <span id="ad-cover-volume-value">60%</span><input type="range" id="ad-cover-volume" min="0" max="100" step="5" value="60" /></label>
     <button id="scan">Scan now</button>
     <button id="restore" disabled>Restore page</button>
     <div id="status"></div>

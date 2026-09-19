@@ -5,7 +5,6 @@
   "description": "Replace likely text advertisements with reversible neutral spaces, on demand.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["http://127.0.0.1/*", "https://api.typesafe.ai/*"],
-  "web_accessible_resources": [{ "resources": ["assets/*"], "matches": ["*://*.youtube.com/*"] }],
   "optional_host_permissions": ["*://*/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "Quiet Space" }

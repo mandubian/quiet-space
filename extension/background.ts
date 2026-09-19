@@ -52,13 +52,9 @@ self.chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 async function injectForAutoScan(tabId: number) {
   try {
-    const [state, { adCoverEnabled }] = await Promise.all([autoStateForTab(tabId), self.chrome.storage.local.get("adCoverEnabled")]);
-    const tab = await self.chrome.tabs.get(tabId);
-    const host = tab.url ? new URL(tab.url).hostname : "";
-    const coverSite = adCoverEnabled === true && /(^|\.)youtube\.com$/.test(host);
-    if (!state.enabled && !coverSite) return;
-    if (coverSite && !(await self.chrome.permissions.contains({ origins: ["*://*.youtube.com/*"] }))) return;
-    if (state.enabled) (self.__jevAuthorizedTabs ??= new Set<number>()).add(tabId);
+    const state = await autoStateForTab(tabId);
+    if (!state.enabled) return;
+    (self.__jevAuthorizedTabs ??= new Set<number>()).add(tabId);
     await self.chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"], injectImmediately: true });
   } catch { /* navigation aborted or frame not ready */ }
 }
