@@ -63,28 +63,37 @@ function readingHidden(node: HTMLElement): boolean {
   return node.dataset.qsReadingHidden === "true";
 }
 
+function dominantContainer(body: HTMLElement): HTMLElement | null {
+  let node: HTMLElement = body;
+  const parentScore = contentScore(node) || 1;
+  for (;;) {
+    const children = [...node.children].filter((child): child is HTMLElement =>
+      (child as HTMLElement).matches?.(containerSelector) && textLength(child as HTMLElement) >= 250 && readingSafe(child as HTMLElement));
+    if (!children.length) break;
+    let best: HTMLElement | null = null;
+    let bestScore = 0;
+    for (const child of children) {
+      const score = contentScore(child);
+      if (score > bestScore) {
+        bestScore = score;
+        best = child;
+      }
+    }
+    if (!best || bestScore < parentScore * 0.4) break;
+    node = best;
+  }
+  return node === body ? null : node;
+}
+
 export function analyzeReading(document: Document): ReadingAnalysis {
   const body = document.body;
   const hideNow: HTMLElement[] = [];
   const ambiguous: HTMLElement[] = [];
   if (!body) return { keep: null, hideNow, ambiguous };
 
-  const containers = [...body.querySelectorAll<HTMLElement>(containerSelector)].filter((node) => textLength(node) >= 250 && readingSafe(node) && !readingHidden(node));
-  let keep: HTMLElement | null = null;
-  let bestScore = 0;
-  for (const node of containers) {
-    const score = contentScore(node);
-    if (score > bestScore) {
-      bestScore = score;
-      keep = node;
-    }
-  }
-  if (keep) {
-    for (const ancestor of keep.parentElement ? [keep.parentElement] : []) {
-      if (ancestor !== document.body && contentScore(ancestor) >= bestScore * 0.75) keep = ancestor;
-    }
-  }
+  const keep = dominantContainer(body);
 
+  const containers = [...body.querySelectorAll<HTMLElement>(containerSelector)].filter((node) => textLength(node) >= 250 && readingSafe(node) && !readingHidden(node));
   const keepRelated = (node: HTMLElement) => keep !== null && (keep.contains(node) || node.contains(keep));
 
   const walker = document.createTreeWalker(body, 1);

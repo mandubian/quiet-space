@@ -4,8 +4,10 @@ import { analyzeReading, applyQuietReading, exitQuietReading, isReadingActive } 
 import { JSDOM } from "jsdom";
 
 const FIXTURE = `<body>
+<div id="page-wrap">
 <nav id="site-nav"><a href="/a">Home</a><a href="/b">World</a></nav>
 <div class="cookie-banner">We use cookies to improve your experience. Accept or manage preferences.</div>
+<div id="content-wrap">
 <article id="story">
 <h1>Deep dive: the quiet architecture</h1>
 <p>The city council approved the plan after a long debate that stretched late into Tuesday evening, drawing residents from every district.</p>
@@ -13,10 +15,12 @@ const FIXTURE = `<body>
 <p>Residents responded positively, though some raised concerns about traffic, noise during construction, and the loss of the old marketplace square.</p>
 </article>
 <div id="extra-part" class="layout-column"><p>Second part of the story continues here with substantial reporting text that the reader came for and would want to keep visible while reading.</p></div>
+<aside id="related" class="related-stories"><a href="/r1">Related: something else happened</a><a href="/r2">More: another story entirely</a></aside>
+</div>
+<section id="comments"><p>I totally disagree with this article.</p><p>Great reporting, keep it up!</p></section>
 <div id="taboola-widget" class="taboola-wrapper"><span role="img" aria-label="Image for Taboola Advertising Unit" class="thumbBlock" style="background-image:url('https://images.taboola.com/taboola/image/fetch/h_377,w_640/https://cdn.taboola.com/libtrc/static/thumbnails/7247ed77cc47111be9d02241346d2284.jpg');"><span class="thumbnail-overlay"></span></span><div class="thumbTitle">You will not believe what happened next</div></div>
 <div id="dtk-wrap"><div class="dtk_poster_placeholder" id="dtk_poster_placeholder_0" style="background-image: url('https://assets.digiteka.com/encoded/5338cee6a6ee0bbd74f298851f0d881eb19dbb10/image/image-001.jpg'); background-size: cover;"></div></div>
-<aside id="related" class="related-stories"><a href="/r1">Related: something else happened</a><a href="/r2">More: another story entirely</a></aside>
-<section id="comments"><p>I totally disagree with this article.</p><p>Great reporting, keep it up!</p></section>
+</div>
 </body>`;
 
 function readingWindow(): JSDOM["window"] {
@@ -32,7 +36,7 @@ function readingWindow(): JSDOM["window"] {
 test("analysis keeps the article and flags nav, banner, related, and comments", () => {
   const window = readingWindow();
   const { keep, hideNow, ambiguous } = analyzeReading(window.document);
-  assert.equal(keep?.id, "story");
+  assert.equal(keep?.id, "story", "dominant-branch descent must reach the article, not the page wrapper");
   const hiddenIds = hideNow.map((node) => node.id);
   assert.ok(hiddenIds.includes("site-nav"), "nav must be deterministic noise");
   assert.ok(hiddenIds.includes("related"), "related stories must be deterministic noise");
