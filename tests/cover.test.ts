@@ -11,7 +11,7 @@ function playerWindow(): JSDOM["window"] {
 
 test("overlay covers the player while an ad shows and disappears when it ends", async () => {
   const window = playerWindow();
-  const stop = createAdCover(window as unknown as Window, { pollMs: 10 });
+  const cover = createAdCover(window as unknown as Window, { pollMs: 10 });
   const player = window.document.getElementById("movie_player")!;
   player.classList.add("ad-showing");
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -22,13 +22,13 @@ test("overlay covers the player while an ad shows and disappears when it ends", 
   player.classList.remove("ad-showing");
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(window.document.querySelector("[data-quiet-cover]"), null, "overlay must disappear when the ad ends");
-  stop();
+  cover.stop();
   window.close();
 });
 
 test("overlay shows the configured image and survives player late arrival", async () => {
   const window = new JSDOM(`<body></body>`).window;
-  const stop = createAdCover(window as unknown as Window, { pollMs: 10, getImageUrl: () => "https://images.example.test/calm.jpg" });
+  const cover = createAdCover(window as unknown as Window, { pollMs: 10, getImageUrl: () => "https://images.example.test/calm.jpg" });
   const player = window.document.createElement("div");
   player.id = "movie_player";
   window.document.body.appendChild(player);
@@ -39,7 +39,7 @@ test("overlay shows the configured image and survives player late arrival", asyn
   const image = overlay.querySelector("img");
   assert.ok(image);
   assert.equal(image.getAttribute("src"), "https://images.example.test/calm.jpg");
-  stop();
+  cover.stop();
   window.close();
 });
 
@@ -48,7 +48,7 @@ test("replacement audio plays during ads with the player muted, and restores aft
   const media = (window as unknown as { HTMLMediaElement: { prototype: Record<string, unknown> } }).HTMLMediaElement.prototype;
   media.play = function (this: HTMLMediaElement & { _plays?: number }) { this._plays = (this._plays ?? 0) + 1; return Promise.resolve(); };
   media.pause = function (this: HTMLMediaElement & { _pauses?: number }) { this._pauses = (this._pauses ?? 0) + 1; };
-  const stop = createAdCover(window as unknown as Window, { pollMs: 10, getAudioUrl: () => "https://audio.example.test/calm.mp3" });
+  const cover = createAdCover(window as unknown as Window, { pollMs: 10, getAudioUrl: () => "https://audio.example.test/calm.mp3" });
   const player = window.document.getElementById("movie_player")!;
   const video = window.document.createElement("video");
   player.appendChild(video);
@@ -63,17 +63,26 @@ test("replacement audio plays during ads with the player muted, and restores aft
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(video.muted, false, "player audio must be restored after the ad");
   assert.ok((audio as HTMLAudioElement & { _pauses?: number })._pauses, "replacement audio must be paused after the ad");
-  stop();
+  cover.stop();
   window.close();
 });
 
-test("stop() removes the overlay and stops watching", async () => {
+test("rain default is used, and setVolume controls live playback level", async () => {
   const window = playerWindow();
-  const stop = createAdCover(window as unknown as Window, { pollMs: 10 });
+  const cover = createAdCover(window as unknown as Window, { pollMs: 10, defaultAudioUrl: "chrome-extension://ext/assets/rain.wav", volume: 0.6 });
   const player = window.document.getElementById("movie_player")!;
+  const video = window.document.createElement("video");
+  player.appendChild(video);
   player.classList.add("ad-showing");
   await new Promise((resolve) => setTimeout(resolve, 50));
-  stop();
+  const audio = window.document.querySelector("audio");
+  assert.ok(audio, "default rain audio must play without a configured URL");
+  assert.match(audio.getAttribute("src") ?? "", /rain\.wav$/);
+  assert.equal(audio.volume, 0.6);
+  cover.setVolume(0.25);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(audio.volume, 0.25, "volume changes apply live");
+  cover.stop();
   assert.equal(window.document.querySelector("[data-quiet-cover]"), null, "overlay removed on stop");
   player.classList.remove("ad-showing");
   player.classList.add("ad-showing");

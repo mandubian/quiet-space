@@ -63,7 +63,7 @@ async function refreshRestoreState() {
   }
 }
 
-function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unknown; consent?: unknown; adCoverEnabled?: unknown; adCoverImage?: unknown; adCoverAudio?: unknown }) {
+function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unknown; consent?: unknown; adCoverEnabled?: unknown; adCoverImage?: unknown; adCoverAudio?: unknown; adCoverVolume?: unknown }) {
   apiKey.value = typeof stored.apiKey === "string" ? stored.apiKey : "";
   threshold.value = typeof stored.threshold === "number" ? String(stored.threshold) : String(DEFAULT_THRESHOLD);
   thresholdValue.textContent = threshold.value;
@@ -72,9 +72,13 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
   const adCover = document.getElementById("ad-cover") as HTMLInputElement;
   const adCoverImage = document.getElementById("ad-cover-image") as HTMLInputElement;
   const adCoverAudio = document.getElementById("ad-cover-audio") as HTMLInputElement;
+  const adCoverVolume = document.getElementById("ad-cover-volume") as HTMLInputElement;
+  const adCoverVolumeValue = document.getElementById("ad-cover-volume-value")!;
   adCover.checked = stored.adCoverEnabled === true;
   adCoverImage.value = typeof stored.adCoverImage === "string" ? stored.adCoverImage : "";
   adCoverAudio.value = typeof stored.adCoverAudio === "string" ? stored.adCoverAudio : "";
+  adCoverVolume.value = typeof stored.adCoverVolume === "number" ? String(Math.round(stored.adCoverVolume * 100)) : "60";
+  adCoverVolumeValue.textContent = `${adCoverVolume.value}%`;
 
   adCover.addEventListener("change", async () => {
     if (adCover.checked) {
@@ -96,6 +100,17 @@ function init(stored: { apiKey?: unknown; threshold?: unknown; autoSites?: unkno
   });
   adCoverImage.addEventListener("change", () => chrome.storage.local.set({ adCoverImage: adCoverImage.value }));
   adCoverAudio.addEventListener("change", () => chrome.storage.local.set({ adCoverAudio: adCoverAudio.value }));
+  const applyCoverVolume = async (fraction: number) => {
+    await chrome.storage.local.set({ adCoverVolume: fraction });
+    const tab = await activeHttpTab();
+    if (!tab?.id) return;
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }).catch(() => undefined);
+    await chrome.tabs.sendMessage(tab.id, { type: "jev-cover-volume", volume: fraction }).catch(() => undefined);
+  };
+  adCoverVolume.addEventListener("input", () => {
+    adCoverVolumeValue.textContent = `${adCoverVolume.value}%`;
+    void applyCoverVolume(Number(adCoverVolume.value) / 100);
+  });
 
   apiKey.addEventListener("change", () => chrome.storage.local.set({ apiKey: apiKey.value }));
   document.getElementById("consent")!.addEventListener("change", (event) => {
@@ -200,7 +215,7 @@ async function scanTab(tabId: number, auto: boolean) {
   await refreshRestoreState();
 }
 
-chrome.storage.local.get(["apiKey", "threshold", "autoSites", "consent", "adCoverEnabled", "adCoverImage", "adCoverAudio"]).then(init);
+chrome.storage.local.get(["apiKey", "threshold", "autoSites", "consent", "adCoverEnabled", "adCoverImage", "adCoverAudio", "adCoverVolume"]).then(init);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "jev-scan-record") return false;

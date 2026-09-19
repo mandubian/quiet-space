@@ -47,11 +47,14 @@ if (!self.__jevInstalled) {
   let verdictsInstance: VerdictCache | undefined;
   void verdictCache.then((cache) => { verdictsInstance = cache; });
 
-  void chrome.storage.local.get(["adCoverEnabled", "adCoverImage", "adCoverAudio"]).then((stored) => {
+  let adCoverHandle: { stop: () => void; setVolume: (volume: number) => void } | undefined;
+  void chrome.storage.local.get(["adCoverEnabled", "adCoverImage", "adCoverAudio", "adCoverVolume"]).then((stored) => {
     if (stored.adCoverEnabled !== true) return;
-    createAdCover(window, {
+    adCoverHandle = createAdCover(window, {
+      defaultAudioUrl: chrome.runtime.getURL("assets/rain.wav"),
       getImageUrl: () => (typeof stored.adCoverImage === "string" && stored.adCoverImage ? stored.adCoverImage : undefined),
       getAudioUrl: () => (typeof stored.adCoverAudio === "string" && stored.adCoverAudio ? stored.adCoverAudio : undefined),
+      volume: typeof stored.adCoverVolume === "number" ? stored.adCoverVolume : 0.6,
     });
   });
 
@@ -72,6 +75,12 @@ if (!self.__jevInstalled) {
     }
     if (message?.type === "jev-state") {
       respond({ placeholders: document.querySelectorAll("[data-jev-neutral]").length });
+      return false;
+    }
+    if (message?.type === "jev-cover-volume") {
+      const volume = Number((message as { volume?: unknown }).volume);
+      adCoverHandle?.setVolume(volume);
+      respond({ applied: Number.isFinite(volume) });
       return false;
     }
     if (message?.type !== "jev-do-scan") return false;
